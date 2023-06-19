@@ -1,10 +1,4 @@
-{:source-paths
- ["src/dev"
-  "src/main"
-  "src/test"]
-
- :dependencies
- [[reagent "1.2.0"]]
+{:deps true
 
  :dev-http {8080 "public"}
 

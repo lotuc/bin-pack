@@ -1,6 +1,6 @@
 (ns lotuc.binpack.eb-afit-io
   (:require
-   [clojure.java.io :as io]
+   #?(:clj [clojure.java.io :as io])
    [clojure.string :as s]))
 
 (declare input-box-list)
@@ -12,16 +12,17 @@
   Some of the test data can be found here at
   https://github.com/wknechtel/3d-bin-pack/tree/master/test."
   [in-txt]
-  (-> in-txt s/split-lines input-box-list))
+  (->> in-txt s/split-lines (filter seq) input-box-list))
 
-(defn read-input-from-resource
-  "Read the test data format defined in in paper
+#?(:clj
+   (defn read-input-from-resource
+     "Read the test data format defined in in paper
   https://scholar.afit.edu/etd/4563/.
 
   Some of the test data can be found here at
   https://github.com/wknechtel/3d-bin-pack/tree/master/test."
-  [resource-name]
-  (-> resource-name io/resource slurp read-input))
+     [resource-name]
+     (-> resource-name io/resource slurp read-input)))
 
 (defn input-box-list-read-line [line]
   (let [[_ _lbl dim0 dim1 dim2 boxn]
