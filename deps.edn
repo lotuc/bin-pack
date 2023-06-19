@@ -1,9 +1,10 @@
 {:paths ["src" "resources"]
  :deps {}
  :aliases
- {:dev  {:extra-paths ["envs/dev/src" "envs/dev/resources"]
+ {:dev  {:extra-paths ["envs/dev/src" "envs/dev/resources"
+                       "envs/test/src" "envs/test/resources"]
          :extra-deps {com.lambdaisland/classpath {:mvn/version "0.4.44"}}}
-  :test {:extra-paths ["env/test/src" "env/test/resources"]
+  :test {:extra-paths ["envs/test/src" "envs/test/resources"]
          :extra-deps {io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
          :main-opts ["-m" "cognitect.test-runner"]
