@@ -1,7 +1,11 @@
 (ns lotuc.binpack.visualizer
-  (:require ["@react-three/drei" :refer [OrbitControls Bounds useBounds]]
+  (:require ["@react-three/drei" :refer [OrbitControls PivotControls
+                                         GizmoHelper GizmoHelper
+                                         Environment Bounds
+                                         Grid Edges]]
             ["@react-three/fiber" :refer [Canvas useFrame]]
-            ["react" :refer [useRef useEffect]]
+            ["leva" :refer [useControls]]
+            ["react" :refer [useRef]]
             ["react-dom/client" :refer [createRoot]]
             [goog.dom :as gdom]
             [lotuc.binpack.colors :refer [seed-rand-color]]
@@ -9,82 +13,127 @@
             [lotuc.binpack.eb-afit-io :as eb-afit-io]
             [reagent.core :as r]))
 
-(def canvas (r/adapt-react-class Canvas))
-(def orbit-controls (r/adapt-react-class OrbitControls))
-(def bounds (r/adapt-react-class Bounds))
-
+;; more test inputs here:
+;; https://github.com/wknechtel/3d-bin-pack/tree/master/test
 (def sample-input-txt "10, 10, 10
 1. 5, 5, 5, 8")
 
-(defn BoxMesh [_props]
-  (let [hovered (r/atom false)
-        active (r/atom false)]
-    (fn [{:keys [position geometry color]}]
+(defn ItemBox [_props]
+  (let [hovered (r/atom false)]
+    (fn [{:keys [position geometry color opacity]}]
       (let [mesh (useRef)
-            _ (useFrame (fn [_state _delta]))
-
-            b (useBounds)
-            _ (useEffect (fn [] (.. b refresh clip fit) (fn []))
-                         #js [])]
+            _ (useFrame (fn [_state _delta]))]
         [:mesh {:ref mesh
                 :position (clj->js position)
-                :scale (if @active 1.5 1)
-                ;; :onClick (fn [_event] (swap! active not))
                 :onPointerOver (fn [_event] (reset! hovered true))
                 :onPointerOut (fn [_event] (reset! hovered false))}
          [:boxGeometry {:args (clj->js geometry)}]
-         [:meshStandardMaterial {:color color}]]))))
+         [:meshBasicMaterial
+          {:transparent true :opacity opacity :depthTest false :color color}]
+         [:> Edges
+          [:meshBasicMaterial {:color color :depthTest false}]]]))))
 
-(def light-position-v 100)
+(defn PalletBox [_props]
+  (fn [{:keys [position geometry color opacity]}]
+    (let [mesh (useRef)
+          _ (useFrame (fn [_state _delta]))]
+      [:> Bounds {:fit true :clip true :observe true :dmaping 6 :margin 2}
+       [:mesh {:ref mesh
+               :position (clj->js position)}
+        [:boxGeometry {:args (clj->js geometry)}]
+        [:meshBasicMaterial {:transparent true :opacity 0}]
+        [:> Edges {:scale 1.01 :lineWidth 3}
+         [:lineBasicMaterial {:color color}]]]])))
 
-(defn main-panel [_props]
-  (fn [{:keys [input-txt]}]
-    [canvas
-     [:ambientLight {:intensity 0.5}]
-     [:spotLight {:position (clj->js [light-position-v
-                                      light-position-v
-                                      light-position-v])
-                  :angle 0.15
-                  :penumbra 1}]
-     [:pointLight {:position (clj->js [light-position-v
-                                       light-position-v
-                                       light-position-v])}]
-     [bounds
-      [:<>
-       (let [rand-color (seed-rand-color 42)]
-         (->> input-txt
-              eb-afit-io/read-input
-              eb-afit/find-best-pack
-              :pack
-              (filter :pack-dims)
-              (map-indexed (fn [i {:keys [pack-dims pack-coord]}]
-                             [:f> BoxMesh {:key i
-                                           :position pack-coord
-                                           :geometry pack-dims
-                                           :color (rand-color)}]))))]]
-     [orbit-controls]]))
+(def default-control-options
+  {:gridSize [10 10]
+   :boxOpacity {"value" 0.7 "min" 0 "max" 1 "step" 0.1}
+
+   :cellSize {"value" 1 "min" 0 "max" 10 "step" 1}
+   :cellThickness {"value" 1 "min" 0 "max" 5 "step" 0.1}
+   :cellColor "#6f6f6f"
+   :sectionThickness {"value" 1 "min" 0 "max" 5 "step" 0.1}
+   :followCamera true
+   :infiniteGrid true})
+
+(defn box-visualizer [_props]
+  (fn [{:keys [packed-res]}]
+    (let [packed-boxes (->> packed-res :pack (filter :pack-dims))
+          pallet-variant (:pallet-variant packed-res)
+
+          {:strs [gridSize boxOpacity] :as c}
+          (->> default-control-options
+               (map (fn [[k v]] [k (clj->js v)]))
+               (into {})
+               clj->js useControls js->clj)
+          grid-props
+          (dissoc c "boxOpacity" "gridSize")
+
+          trans-pos
+          (fn [pos geo]
+            (map + pos (map #(/ % 2) geo)))]
+      [:> Canvas
+       (when pallet-variant
+         [:f> PalletBox {:position (trans-pos [0 0 0] pallet-variant)
+                         :geometry pallet-variant
+                         :color "red"}])
+       [:<>
+        (let [rand-color (seed-rand-color 42)]
+          (map-indexed (fn [i {:keys [pack-dims pack-coord]}]
+                         [:f> ItemBox
+                          {:key i
+                           :position (trans-pos pack-coord pack-dims)
+                           :geometry pack-dims
+                           :opacity boxOpacity
+                           :color (rand-color)}])
+                       packed-boxes))]
+       [:> Grid (merge {:position #js [0 0 0] :args gridSize} grid-props)]
+       [:> Environment {:preset "city"}]
+       [:> OrbitControls {:makeDefault true}]
+       [:> PivotControls]
+       [:> GizmoHelper {:makeDefault true :alignment "bottom-right" :margin #js [80 80]}
+        [:> GizmoHelper {:axisColors #js ["#9d4b4b", "#2f7f4f", "#3b5b9d"] :labelColor "white"}]]])))
 
 (defn app
   []
-  (let [packed-txt (r/atom sample-input-txt)
-        input-txt (r/atom sample-input-txt)]
+  (let [input-txt (r/atom sample-input-txt)
+        packed-res (r/atom nil)
+
+        find-best-pack
+        (fn [txt]
+          (let [r (->> txt
+                       eb-afit-io/read-input
+                       eb-afit/find-best-pack)]
+            (reset! packed-res r)))]
+
+    ;; initialize with sample input's packing found.
+    (find-best-pack @input-txt)
+
     (fn []
       [:div {:class "h-screen flex flex-row"}
-       [:div {:class "w-1/4 h-screen flex flex-col"}
-        [:button
-         {:onClick (fn [_]
-                     (reset! packed-txt sample-input-txt)
-                     (reset! input-txt sample-input-txt))}
-         "Reset Input"]
-        [:button
-         {:onClick (fn [_]
-                     (reset! packed-txt @input-txt))}
-         "Render Input"]
-        [:textarea {:class "h-96 border-solid border-2 border-indigo-600 p-2"
+       ;; Left side input area
+       [:div {:class "w-1/4 m-2 h-screen flex flex-col space-y-2"}
+        [:div
+         [:a {:href "https://github.com/lotuc/bin-pack"
+              :target "_blank"
+              :class "font-semibold"} "Github lotuc/bin-pack"]]
+        [:textarea {:class "h-96 border-solid border-2"
                     :value @input-txt
-                    :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]]
+                    :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]
+
+        [:div
+         [:button {:class "p-1 border-solid border-2 border-indigo-600"
+                   :onClick (fn [_] (find-best-pack @input-txt))}
+          "Find best pack"]]
+
+        [:textarea {:class "h-96 border-solid border-2"
+                    :readOnly true
+                    :value (some-> (->> @packed-res :pack (filter :pack-dims))
+                                   clj->js
+                                   (js/JSON.stringify nil 2))}]]
+       ;; Right side rendering area
        [:div {:class "w-3/4 h-screen border-solid border-2 border-indigo-600"}
-        [:f> main-panel {:input-txt @packed-txt}]]])))
+        [:f> box-visualizer {:packed-res @packed-res}]]])))
 
 (defonce root (createRoot (gdom/getElement "root")))
 
