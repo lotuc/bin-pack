@@ -1,5 +1,5 @@
 {:paths ["src" "resources"]
- :deps {}
+ :deps {bsless/clj-fast {:mvn/version "0.0.11"}}
  :aliases
  {:dev  {:extra-paths ["envs/dev/src" "envs/dev/resources"
                        "envs/test/src" "envs/test/resources"]

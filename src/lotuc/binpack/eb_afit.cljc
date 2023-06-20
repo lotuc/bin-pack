@@ -1,7 +1,11 @@
 (ns lotuc.binpack.eb-afit
   "eb stands for the paper's author Erhan Baltacioglu, and afit stands for Air
   Force Institude of Technology."
+  (:refer-clojure
+   :exclude [get-in])
   (:require
+   [clj-fast.clojure.core :as clj-fast
+    :refer [get-in]]
    [clojure.set :as set]))
 
 (declare exec-iterations)
@@ -387,14 +391,14 @@
   (let [[_ layer-thickness]
         (->> (for [x (range (count boxes))
                    [exdim dim2 dim3] (rotate-dim1 (:dims (boxes x)))
-                   :when (and (not (get-in boxes [x :pack-dims]))
+                   :when (and (not (:pack-dims (boxes x)))
                               (<= exdim remain-py)
                               (or (and (<= dim2 px) (< dim3 pz))
                                   (and (<= dim3 px) (< dim2 pz))))
                    :let [layer-weight
                          (->> (for [z (range (count boxes))
                                     :when (and (not= x z)
-                                               (not (get-in boxes [z :pack-dims])))
+                                               (not (:pack-dims (boxes z))))
                                     :let [[dx dy dz] (:dims (boxes z))]]
                                 (min (abs (- exdim dx))
                                      (abs (- exdim dy))
