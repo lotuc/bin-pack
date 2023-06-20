@@ -8,6 +8,9 @@
     :refer [get-in]]
    [clojure.set :as set]))
 
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(set! *unchecked-math* true)
+
 (declare exec-iterations)
 
 (defn find-best-pack
@@ -384,26 +387,34 @@
                  c-box (apply-volume-check c-box input)
                  c-box (assoc :scrap-pad (apply-found-box state' c-box))))))))
 
+(defn calc-layer-weight
+  [boxes ^long x ^long exdim]
+  (let [tbn (count boxes)]
+    (loop [z 0 r 0]
+      (if (< z tbn)
+        (let [b (clj-fast/get boxes z)]
+          (if (or (= x z) (clj-fast/get b :pack-dims))
+            (recur (unchecked-inc z) r)
+            (let [[^long dx ^long dy ^long dz] (clj-fast/get b :dims)]
+              (recur (unchecked-inc z)
+                     (min (abs (unchecked-subtract exdim dx))
+                          (abs (unchecked-subtract exdim dy))
+                          (abs (unchecked-subtract exdim dz)))))))
+        r))))
+
 (defn find-layer
   [{:keys [boxes remain-py]
-    [px _py pz] :pallet
+    [^long px _py ^long pz] :pallet
     :as state}]
   (let [[_ layer-thickness]
-        (->> (for [x (range (count boxes))
-                   [exdim dim2 dim3] (rotate-dim1 (:dims (boxes x)))
+        (->> (for [^long x (range (count boxes))
+                   [^long exdim ^long dim2 ^long dim3] (rotate-dim1 (:dims (boxes x)))
                    :when (and (not (:pack-dims (boxes x)))
                               (<= exdim remain-py)
                               (or (and (<= dim2 px) (< dim3 pz))
                                   (and (<= dim3 px) (< dim2 pz))))
-                   :let [layer-weight
-                         (->> (for [z (range (count boxes))
-                                    :when (and (not= x z)
-                                               (not (:pack-dims (boxes z))))
-                                    :let [[dx dy dz] (:dims (boxes z))]]
-                                (min (abs (- exdim dx))
-                                     (abs (- exdim dy))
-                                     (abs (- exdim dz))))
-                              (apply +))]]
+                   :let [layer-weight (calc-layer-weight boxes x exdim)]]
+
                [layer-weight exdim])
              (reduce (fn [[weight exdim] [new-weight new-exdim]]
                        (if (< new-weight weight)
