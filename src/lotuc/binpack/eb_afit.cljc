@@ -32,6 +32,32 @@
   - pallet-variant: the pack strategy's pallet variant
   - layer: the pack strategy's initial layer thickness (dim) and its weight
      (weight).
+  - pack: the packed result, it's the input.boxes with pack result fields (for
+    the boxes that are packed)
+
+  ```
+  (find-best-pack {:pallet-volume 1000,
+                   :pallet-dims [10 10 10],
+                   :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
+                   :box-volume 1000})
+  ;; ->
+  {:input
+   {:pallet-volume 1000,
+    :pallet-dims [10 10 10],
+    :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
+    :box-volume 1000},
+   :percentage-used 100.0,
+   :packed-volume 1000,
+   :packed-number 1,
+   :pallet-variant [10 10 10],
+   :layer {:weight 0, :dim 10},
+   :pack
+   [{:dims [10 10 10],
+     :vol 1000,
+     :n 1,
+     :pack-dims [10 10 10],
+   :pack-coord [0 0 0]}]}
+  ```
   "
   [input]
   (-> (exec-iterations input)
@@ -250,23 +276,16 @@
     (let [scrap-pad-before (subvec scrap-pad 0 smallest-z)
           scrap-pad-after (subvec scrap-pad (inc smallest-z))
 
+          {:keys [cumx]} (scrap-pad smallest-z)
           {pre-cumz :cumz :as pre} (last scrap-pad-before)
-          {pos-cumx :cumx pos-cumz :cumz :as pos} (first scrap-pad-after)]
-      (cond
-        (= pre-cumz pos-cumz)
+          {pos-cumz :cumz :as pos} (first scrap-pad-after)]
+      (if (= pre-cumz pos-cumz)
         (into (into [] (drop-last scrap-pad-before))
-              (rest scrap-pad-after))
-
-        (< pre-cumz pos-cumz)
-        (into (conj (into [] (drop-last scrap-pad-before))
-                    {:cumx pos-cumx :cumz pre-cumz})
               scrap-pad-after)
 
-        ;; (> pre-cumz pos-cumz)
-        :else
         (into (conj (into [] (drop-last scrap-pad-before))
-                    {:cumx pos-cumx :cumz pre-cumz})
-              (rest scrap-pad-after))))))
+                    {:cumx cumx :cumz pre-cumz})
+              scrap-pad-after)))))
 
 (defn check-found
   "returns [state', {layer-done? ignore-gap? c-box}]."
@@ -482,4 +501,3 @@
              state pallet-variant input)]
         (if hundred-percent? state' (recur rest-pallet-variants state')))
       state)))
-
