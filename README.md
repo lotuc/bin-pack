@@ -17,6 +17,8 @@ The [visualizer](./visualizer/README.md) (which is deployed at
 https://lotuc.org/bin-pack/) take the input text, find the best packing strategy
 and visualize the packing result.
 
+![](./visualizer/doc/resources/bin-pack-sample-visualization-0.png)
+
 The input text format is defined in the original paper, and you can find more
 sample data [here](https://github.com/wknechtel/3d-bin-pack/tree/master/test).
 
