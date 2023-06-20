@@ -24,36 +24,51 @@
      [resource-name]
      (-> resource-name io/resource slurp read-input)))
 
-(defn input-box-list-read-line [line]
-  (let [[_ _lbl dim0 dim1 dim2 boxn]
-        (re-find #"(.+)\.\s+(.+),\s+(.+),\s+(.+),\s+(.+)" line)
+(def regexp-box-line
+  #"(.+?)\s+(\d+)\s*,?\s+(\d+)\s*,?\s+(\d+)\s*,?\s+(\d+)\s*$")
+
+(def regexp-pallet-line
+  #"(\d+)\s*,?\s+(\d+)\s*,?\s+(\d+)\s*$")
+
+(defn- assert-line-valid [valid? line desc]
+  (when-not valid?
+    (throw (ex-info (str "invalid " desc) {:line line}))))
+
+(defn parse-box-line [line]
+  (let [r (re-find regexp-box-line line)
+
+        _ (assert-line-valid (some? r) line "box info")
+        [_ _lbl dim0 dim1 dim2 boxn] r
+
         n (parse-long boxn)
         dim0 (parse-long dim0)
         dim1 (parse-long dim1)
-        dim2 (parse-long dim2)
-        box {:dims [dim0 dim1 dim2]
-             :vol  (* dim0 dim1 dim2)
-             :n n}]
-    [n box]))
+        dim2 (parse-long dim2)]
+
+    (assert-line-valid (every? some? [n dim0 dim1 dim2]) line "box info")
+    {:dims [dim0 dim1 dim2] :vol  (* dim0 dim1 dim2) :n n}))
+
+(defn parse-pallet-line [line]
+  (let [r (re-find regexp-pallet-line line)
+        _ (assert-line-valid (some? r) line "pallet info")
+        [_ x y z] r
+
+        xx (parse-long x)
+        yy (parse-long y)
+        zz (parse-long z)]
+    (assert-line-valid (every? some? [xx yy zz]) line "pallet info")
+    {:pallet-volume (* xx yy zz)
+     :pallet-dims [xx yy zz]}))
 
 (defn input-box-list [lines]
-  (let [handle-pallet-line
-        (fn [line]
-          (let [[xx yy zz]
-                (->> (s/split line #",")
-                     (map s/trim)
-                     (map parse-long))]
-            {:pallet-volume (* xx yy zz)
-             :pallet-dims [xx yy zz]}))
-
-        handle-box-line
+  (let [handle-box-line
         (fn [[boxes box-vol] line]
-          (let [[n box] (input-box-list-read-line line)]
+          (let [{:keys [n] :as box} (parse-box-line line)]
             [(reduce (fn [boxes' _] (conj boxes' box)) boxes (range n))
              (+ box-vol (* n (:vol box)))]))
 
         [boxes box-vol]
         (reduce handle-box-line [[] 0] (rest lines))]
     (merge
-     (handle-pallet-line (first lines))
+     (parse-pallet-line (first lines))
      {:boxes boxes :box-volume box-vol})))

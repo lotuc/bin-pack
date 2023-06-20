@@ -2,7 +2,8 @@
   (:use clojure.test)
   (:require
    [lotuc.binpack.eb-afit :as eb-afit]
-   [lotuc.binpack.eb-afit-io :as eb-afit-io]))
+   [lotuc.binpack.eb-afit-io :as eb-afit-io]
+   [lotuc.binpack.eb-afit-io-test :as eb-afit-io-test]))
 
 (deftest apply-found-box-test
   (testing "smallest-z gap is the only gap"
@@ -36,12 +37,19 @@
   (testing "smallest-z gap has gap on both side."))
 
 (deftest find-best-test
-  (testing "dpp00"
-    (is (= [{:dims [10 10 10]
-             :vol 1000
-             :n 1
-             :pack-dims [10 10 10]
-             :pack-coord [0 0 0]}]
-           (-> (eb-afit-io/read-input-from-resource "test-dpp00.txt")
-               eb-afit/exec-iterations
-               :best-pack)))))
+  (is (= [{:dims [10 10 10]
+           :vol 1000
+           :n 1
+           :pack-dims [10 10 10]
+           :pack-coord [0 0 0]}]
+         (-> (eb-afit-io/read-input-from-resource "test-dpp00.txt")
+             eb-afit/exec-iterations
+             :best-pack)))
+
+  (testing "can handle all test resources"
+    (doseq [n eb-afit-io-test/test-resources]
+      (println "testing" n)
+      (is (some? (-> (eb-afit-io/read-input-from-resource n)
+                     eb-afit/exec-iterations
+                     :best-pack))
+          (str "find-best-pack for " n)))))
