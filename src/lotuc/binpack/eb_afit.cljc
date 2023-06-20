@@ -228,7 +228,7 @@
             (update :packed-volume #(+ (or % 0) box-vol))
             (update :packed-number #(inc (or % 0))))]
 
-    #?(:clj (aset ^:booleans box-packed index true))
+    #?(:clj (aset ^booleans box-packed index true))
 
     (cond-> state'
       (or (= packed-volume box-volume) (= packed-volume pallet-volume))
@@ -393,6 +393,7 @@
 (defn calc-layer-weight
   [{:keys [boxes box-xs box-ys box-zs box-packed]} ^long x ^long exdim]
   #?(:clj
+     ;; this is 10 time faster than the default one
      (let [tbn (count boxes)]
        (loop [z 0 r 0]
          (if (< z tbn)
@@ -424,20 +425,21 @@
     [^long px _py ^long pz] :pallet
     :as state}]
   (let [[_ layer-thickness]
-        (->> (for [^long x (range (count boxes))
-                   [^long exdim ^long dim2 ^long dim3] (rotate-dim1 (:dims (boxes x)))
-                   :when (and (not (:pack-dims (boxes x)))
-                              (<= exdim remain-py)
-                              (or (and (<= dim2 px) (< dim3 pz))
-                                  (and (<= dim3 px) (< dim2 pz))))
-                   :let [layer-weight (calc-layer-weight state x exdim)]]
+        #?(:default
+           (->> (for [^long x (range (count boxes))
+                      [^long exdim ^long dim2 ^long dim3] (rotate-dim1 (:dims (boxes x)))
+                      :when (and (not (:pack-dims (boxes x)))
+                                 (<= exdim remain-py)
+                                 (or (and (<= dim2 px) (< dim3 pz))
+                                     (and (<= dim3 px) (< dim2 pz))))
+                      :let [layer-weight (calc-layer-weight state x exdim)]]
 
-               [layer-weight exdim])
-             (reduce (fn [[weight exdim] [new-weight new-exdim]]
-                       (if (< new-weight weight)
-                         [new-weight new-exdim]
-                         [weight exdim]))
-                     [1000000 0]))]
+                  [layer-weight exdim])
+                (reduce (fn [[weight exdim] [new-weight new-exdim]]
+                          (if (< new-weight weight)
+                            [new-weight new-exdim]
+                            [weight exdim]))
+                        [1000000 0])))]
     (if (or (= layer-thickness 0) (> layer-thickness remain-py))
       {:packing false}
       {:packing true :layer-thickness layer-thickness})))
@@ -474,15 +476,33 @@
           (recur rest-layers state')))
       state)))
 
+(defn make-box-xyz-array [_boxes]
+  #?(:clj (let [box-xs (make-array Long/TYPE (count _boxes))
+                box-ys (make-array Long/TYPE (count _boxes))
+                box-zs (make-array Long/TYPE (count _boxes))
+                _
+                (doseq [[i {[x y z] :dims}]
+                        (map-indexed (fn [i b] [i b]) _boxes)]
+                  (aset ^longs box-xs i x)
+                  (aset ^longs box-ys i y)
+                  (aset ^longs box-zs i z))]
+
+            {:box-xs box-xs
+             :box-ys box-ys
+             :box-zs box-zs})
+     :default nil))
+
 (defn exec-iteration-on-pallet-variant-with-layer
   [pallet-variant
    {:keys [dim] :as layer}
-   {:keys [boxes box-volume pallet-volume] :as input}]
+   {:keys [boxes box-xs box-volume pallet-volume] :as input}]
   (let [[_px py pz] pallet-variant
 
         ;; optimization fields using java native array.
         java-optimization-fields
-        #?(:clj (-> (select-keys input [:box-xs :box-ys :box-zs])
+        #?(:clj (-> (if box-xs
+                      (select-keys input [:box-xs :box-ys :box-zs])
+                      (make-box-xyz-array boxes))
                     (assoc :box-packed (make-array Boolean/TYPE (count boxes))))
            :default nil)
 
@@ -532,24 +552,15 @@
           (recur state''')
           state''')))))
 
+#_{:clj-kondo/ignore [:unresolved-namespace]}
+(comment
+  (->> (lotuc.binpack.eb-afit-io/read-input-from-resource "3d-bin-pack-test/dpp05.txt")
+       (exec-iteration-on-pallet-variant-with-layer [96 104 84] {:dim 14})
+       :boxes))
+
 (defn exec-iterations
   [{:keys [boxes box-volume pallet-dims pallet-volume] :as input}]
-  (let [java-optimization-fields
-        #?(:clj (let [box-xs (make-array Long/TYPE (count boxes))
-                      box-ys (make-array Long/TYPE (count boxes))
-                      box-zs (make-array Long/TYPE (count boxes))
-                      _
-                      (doseq [[i {[x y z] :dims}]
-                              (map-indexed (fn [i b] [i b]) boxes)]
-                        (aset ^:longs box-xs i x)
-                        (aset ^:longs box-ys i y)
-                        (aset ^:longs box-zs i z))]
-
-                  {:box-xs box-xs
-                   :box-ys box-ys
-                   :box-zs box-zs})
-           :default nil)
-
+  (let [java-optimization-fields (make-box-xyz-array boxes)
         input (merge input java-optimization-fields)]
 
     (loop [[pallet-variant & rest-pallet-variants]

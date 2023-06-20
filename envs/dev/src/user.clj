@@ -1,23 +1,35 @@
 (ns user
   (:require [flames.core :as flames]
             [lambdaisland.classpath.watch-deps :as watch-deps]
-            [lotuc.binpack.eb-afit]
-            [lotuc.binpack.eb-afit-io]))
+            [lotuc.binpack.eb-afit :as eb-afit]
+            [lotuc.binpack.eb-afit-io :as eb-afit-io]))
 
-(watch-deps/start! {:aliases [:dev :test]})
+(defonce watch-deps-started (atom nil))
+(when (and (not @watch-deps-started) (swap! watch-deps-started not))
+  (watch-deps/start! {:aliases [:dev :test]}))
+
+(defonce flames (atom nil))
+
+(defn stop-flame []
+  (->> #(do (when % (.close %)) nil)
+       (swap! flames)))
+
+(defn start-flame []
+  (->> #(do (when % (.close %)) (flames/start! {:port 54321, :host "localhost"}))
+       (swap! flames)))
+
+(defn find-best-pack-flame [& {:keys [n]
+                               :or {n "3d-bin-pack-test/mpp02.txt"}}]
+  (let [input (eb-afit-io/read-input-from-resource n)]
+    (start-flame)
+    (println "========================================")
+    (println (count (:boxes input)))
+    (let [r (time (eb-afit/find-best-pack input))
+          r (-> r
+                (dissoc :input :pack)
+                (assoc :total-number (count (:input r))))]
+      (println r))
+    (println "========================================")))
 
 (comment
-  (def flames (atom nil))
-  (swap! flames (fn [v] (when v (.close v)) nil))
-
-  (swap! flames
-         (fn [v]
-           (when v (.close v))
-           (flames/start! {:port 54321, :host "localhost"})))
-
-  (doseq [_ (range 10)]
-    (let [input (-> "3d-bin-pack-test/mpp03.txt"
-                    lotuc.binpack.eb-afit-io/read-input-from-resource)]
-      (println "start")
-      (println (:percentage-used (time (lotuc.binpack.eb-afit/find-best-pack input))))
-      (println "finished"))))
+  (find-best-pack-flame))

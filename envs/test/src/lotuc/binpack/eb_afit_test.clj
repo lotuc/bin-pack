@@ -2,6 +2,7 @@
   (:use clojure.test)
   (:require
    [clojure.java.io :as io]
+   [clojure.pprint :as pprint]
    [clojure.string :as s]
    [lotuc.binpack.eb-afit :as eb-afit]
    [lotuc.binpack.eb-afit-io :as eb-afit-io]
@@ -64,6 +65,38 @@
              :smallest-z 1}))
         "pre cumz < pos cumz")))
 
+(deftest calc-layer-weight-perf-test
+  (testing "calc-layer-weight perf"
+    (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
+                 eb-afit-io/read-input-from-resource)
+          bs (:boxes i0)
+          i1 (-> (merge i0 (eb-afit/make-box-xyz-array bs))
+                 (assoc :box-packed (make-array Boolean/TYPE (count bs))))
+          c 300000]
+      (println
+       (str "calc-layer " c " times: ")
+       (with-out-str
+         (time (doseq [_ (range c)]
+                 (eb-afit/calc-layer-weight i1 10 14)))))
+      (is true))))
+
+(deftest find-layer-perf-test
+  (testing "find-layer perf"
+    (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
+                 eb-afit-io/read-input-from-resource)
+          bs (:boxes i0)
+          i1 (-> (merge i0 (eb-afit/make-box-xyz-array bs))
+                 (assoc :box-packed (make-array Boolean/TYPE (count bs))
+                        :remain-py 96
+                        :pallet [104 96 84]))
+          c (* 5 200)]
+      (println
+       (str "find-layer " c " times: ")
+       (with-out-str
+         (time (doseq [_ (range c)]
+                 (eb-afit/find-layer i1)))))
+      (is true))))
+
 (defn- test-find-test-pack-on-resource [resource-name-or-file]
   (println "start find-best-pack " resource-name-or-file)
   (let [in-txt (if (.exists (io/file resource-name-or-file))
@@ -75,12 +108,12 @@
                  (->> (eb-afit-io/read-input in-txt)
                       eb-afit/find-best-pack
                       (reset! r))))
-        {:keys [input] :as r} @r]
+        r @r]
     (println "!! " resource-name-or-file "costs " (s/trim costs)
-             (select-keys r [:percentage-used]) "\n\t"
-             (assoc (select-keys r [:packed-volume :packed-number])
-                    :total-number (count (:boxes input)))
-             (select-keys r [:pallet-variant :layer]))
+             (select-keys r [:percentage-used]))
+    (pprint/pprint (-> r
+                       (dissoc :input :pack)
+                       (assoc :total-number (count (:input r)))))
     (is (some? r) (str "find-best-pack " resource-name-or-file))))
 
 (deftest find-best-dpp-input-test
