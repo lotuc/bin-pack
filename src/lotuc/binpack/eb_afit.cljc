@@ -31,7 +31,7 @@
   - packed-number: number of boxes packed
   - pallet-variant: the pack strategy's pallet variant
   - layer: the pack strategy's initial layer thickness (dim) and its weight
-     (eval).
+     (weight).
   "
   [input]
   (-> (exec-iterations input)
@@ -72,7 +72,7 @@
              (and (<= exdim py)
                   (or (and (<= dimen2 px) (<= dimen3 pz))
                       (and (<= dimen3 px) (<= dimen2 pz))))]
-         [exdim (delay (let [eval
+         [exdim (delay (let [weight
                              (->> (for [z (range (count boxes))
                                         :when (not= x z)
                                         :let [box-z (boxes z)]]
@@ -80,12 +80,12 @@
                                          (map #(abs (- exdim %)))
                                          (apply min)))
                                   (apply +))]
-                         {:eval eval :dim exdim}))])
+                         {:weight weight :dim exdim}))])
        (into {})
        (map (comp deref second))))
 
 (defn sort-layers [layers]
-  (sort-by :eval layers))
+  (sort-by :weight layers))
 
 (defn find-smallest-z
   "Array of {:keys [cumz cumx]}"
@@ -372,7 +372,7 @@
                               (<= exdim remain-py)
                               (or (and (<= dim2 px) (< dim3 pz))
                                   (and (<= dim3 px) (< dim2 pz))))
-                   :let [layer-eval
+                   :let [layer-weight
                          (->> (for [z (range (count boxes))
                                     :when (and (not= x z)
                                                (not (get-in boxes [z :pack-dims])))
@@ -381,11 +381,11 @@
                                      (abs (- exdim dy))
                                      (abs (- exdim dz))))
                               (apply +))]]
-               [layer-eval exdim])
-             (reduce (fn [[layer-eval exdim] [new-layer-eval new-exdim]]
-                       (if (< new-layer-eval layer-eval)
-                         [new-layer-eval new-exdim]
-                         [layer-eval exdim]))
+               [layer-weight exdim])
+             (reduce (fn [[weight exdim] [new-weight new-exdim]]
+                       (if (< new-weight weight)
+                         [new-weight new-exdim]
+                         [weight exdim]))
                      [1000000 0]))]
     (if (or (= layer-thickness 0) (> layer-thickness remain-py))
       {:packing false}
