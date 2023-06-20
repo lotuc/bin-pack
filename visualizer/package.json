@@ -6,10 +6,10 @@
     "postcss:build": "cross-env postcss src/main/tailwind.css -o ./public/css/main.css --verbose",
     "postcss:watch": "cross-env postcss src/main/tailwind.css -o ./public/css/main.css --verbose -w",
     "postcss:release": "cross-env NODE_ENV=production postcss src/main/tailwind.css -o ./public/css/main.css --verbose",
-    "shadow:watch": "shadow-cljs watch frontend",
-    "shadow:release": "shadow-cljs release frontend",
+    "shadow:watch": "shadow-cljs watch app",
+    "shadow:release": "shadow-cljs release app",
     "dev": "run-p -l *:watch",
-    "release": "run-s *:release"
+    "release": "run-s shadow:release postcss:release"
   },
   "devDependencies": {
     "shadow-cljs": "2.23.3"
