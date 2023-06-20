@@ -5,7 +5,6 @@
                        "envs/test/src" "envs/test/resources"]
          :extra-deps {com.lambdaisland/classpath {:mvn/version "0.4.44"}}}
 
-  ;; clj -X:test :dirs '["envs/test/"]' :excludes '[:find-best-large-input]'
   :test {:extra-paths ["envs/test/src" "envs/test/resources"]
          :extra-deps {io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
