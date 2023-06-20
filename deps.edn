@@ -3,7 +3,8 @@
  :aliases
  {:dev  {:extra-paths ["envs/dev/src" "envs/dev/resources"
                        "envs/test/src" "envs/test/resources"]
-         :extra-deps {com.lambdaisland/classpath {:mvn/version "0.4.44"}}}
+         :extra-deps {com.lambdaisland/classpath {:mvn/version "0.4.44"}
+                      flames/flames {:mvn/version "0.5.0"}}}
 
   :test {:extra-paths ["envs/test/src" "envs/test/resources"]
          :extra-deps {io.github.cognitect-labs/test-runner
