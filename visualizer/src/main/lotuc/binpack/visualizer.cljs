@@ -48,7 +48,6 @@
 (def default-control-options
   {:gridSize [10 10]
    :boxOpacity {"value" 0.7 "min" 0 "max" 1 "step" 0.1}
-   :boxes {"value" 100 "min" 0 "step" 1}
 
    :cellSize {"value" 1 "min" 0 "max" 10 "step" 1}
    :cellThickness {"value" 1 "min" 0 "max" 5 "step" 0.1}
@@ -57,16 +56,26 @@
    :followCamera true
    :infiniteGrid true})
 
+(defn- useControls' [folder-name args]
+  (let [args' (->> args
+                   (map (fn [[k v]] [k (clj->js v)]))
+                   (into {})
+                   clj->js)]
+    (js->clj (useControls folder-name args'))))
+
 (defn box-visualizer [_props]
   (fn [{:keys [packed-res]}]
     (let [packed-boxes (:packing-order packed-res)
           pallet-variant (:pallet packed-res)
 
-          {:strs [gridSize boxOpacity boxes] :as c}
-          (->> (assoc default-control-options :boxes (count packed-boxes))
-               (map (fn [[k v]] [k (clj->js v)]))
-               (into {})
-               clj->js useControls js->clj)
+          {:strs [packedBoxes] :as c1}
+          (useControls'
+           "Replay" {:packedBoxes {"value" -1 "min" -1 "step" 1}})
+
+          {:strs [gridSize boxOpacity] :as c}
+          (useControls'
+           "Display" default-control-options)
+
           grid-props
           (dissoc c "boxOpacity" "gridSize")
 
@@ -82,7 +91,7 @@
         (let [rand-color (seed-rand-color 42)]
           (->> packed-boxes
                (map-indexed (fn [i v] [i v]))
-               (filter (fn [[i _v]] (if boxes (< i boxes) true)))
+               (filter (fn [[i _v]] (or (< packedBoxes 0) (< i packedBoxes))))
                (map (fn [[i {:keys [pack-dims pack-coord]}]]
                       [:f> ItemBox
                        {:key i
@@ -102,43 +111,45 @@
   []
   (let [input-txt (r/atom sample-input-txt)
         packed-res (r/atom nil)
+        calculating (r/atom false)
 
         find-best-pack
         (fn [txt]
-          (let [i (eb-afit-io/read-input txt)
-                r (eb-afit/find-best-pack i)
-                r (eb-afit/exec-iteration-on-pallet-variant-with-layer
-                   (:pallet-variant r) (:layer r) i
-                   {:packing-order []})]
-            (reset! packed-res r)))]
+          (reset! calculating true)
+          (js/setTimeout
+           #(try (let [i (eb-afit-io/read-input txt)
+                       r (eb-afit/find-best-pack i)
+                       r (eb-afit/exec-iteration-on-pallet-variant-with-layer
+                          (:pallet-variant r) (:layer r) i
+                          {:packing-order []})]
+                   (reset! packed-res r))
+                 (finally (reset! calculating false)))
+           100))]
 
-;; initialize with sample input's packing found.
+    ;; initialize with sample input's packing found.
     (find-best-pack @input-txt)
 
     (fn []
-      [:div {:class "h-screen flex flex-row"}
+      [:div {:class "h-screen p-2 flex flex-row"}
        ;; Left side input area
-       [:div {:class "w-1/4 m-2 h-screen flex flex-col space-y-2"}
+       [:div {:class "w-1/4 h-full flex flex-col mr-2"}
         [:div
          [:a {:href "https://github.com/lotuc/bin-pack"
               :target "_blank"
               :class "font-semibold"} "Github lotuc/bin-pack"]]
-        [:textarea {:class "h-96 border-solid border-2"
+        [:textarea {:class "grow border-solid border-2 border-indigo-600"
                     :value @input-txt
                     :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]
 
-        [:div
-         [:button {:class "p-1 border-solid border-2 border-indigo-600"
-                   :onClick (fn [_] (find-best-pack @input-txt))}
-          "Find best pack"]]
-
-        [:textarea {:class "h-96 border-solid border-2"
-                    :readOnly true
-                    :value (some-> (->> @packed-res :pack (filter :pack-dims))
-                                   clj->js
-                                   (js/JSON.stringify nil 2))}]]
+        [:button {:class (str "p-1 w-full bg-violet-500 hover:bg-violet-600"
+                              " active:bg-violet-700 focus:outline-none"
+                              " focus:ring focus:ring-violet-300 text-white")
+                  :disabled @calculating
+                  :onClick (fn [_] (find-best-pack @input-txt))}
+         (str "Find best pack"
+              (when @calculating "(calculating)"))]]
        ;; Right side rendering area
-       [:div {:class "w-3/4 h-screen border-solid border-2 border-indigo-600"}
+       [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
         [:f> box-visualizer {:packed-res @packed-res}]]])))
 
 (defonce root (createRoot (gdom/getElement "root")))
