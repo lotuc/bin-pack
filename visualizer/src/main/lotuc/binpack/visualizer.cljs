@@ -48,6 +48,7 @@
 (def default-control-options
   {:gridSize [10 10]
    :boxOpacity {"value" 0.7 "min" 0 "max" 1 "step" 0.1}
+   :boxes {"value" 100 "min" 0 "step" 1}
 
    :cellSize {"value" 1 "min" 0 "max" 10 "step" 1}
    :cellThickness {"value" 1 "min" 0 "max" 5 "step" 0.1}
@@ -58,11 +59,11 @@
 
 (defn box-visualizer [_props]
   (fn [{:keys [packed-res]}]
-    (let [packed-boxes (->> packed-res :pack (filter :pack-dims))
-          pallet-variant (:pallet-variant packed-res)
+    (let [packed-boxes (:packing-order packed-res)
+          pallet-variant (:pallet packed-res)
 
-          {:strs [gridSize boxOpacity] :as c}
-          (->> default-control-options
+          {:strs [gridSize boxOpacity boxes] :as c}
+          (->> (assoc default-control-options :boxes (count packed-boxes))
                (map (fn [[k v]] [k (clj->js v)]))
                (into {})
                clj->js useControls js->clj)
@@ -79,14 +80,17 @@
                          :color "red"}])
        [:<>
         (let [rand-color (seed-rand-color 42)]
-          (map-indexed (fn [i {:keys [pack-dims pack-coord]}]
-                         [:f> ItemBox
-                          {:key i
-                           :position (trans-pos pack-coord pack-dims)
-                           :geometry pack-dims
-                           :opacity boxOpacity
-                           :color (rand-color)}])
-                       packed-boxes))]
+          (->> packed-boxes
+               (map-indexed (fn [i v] [i v]))
+               (filter (fn [[i _v]] (if boxes (< i boxes) true)))
+               (map (fn [[i {:keys [pack-dims pack-coord]}]]
+                      [:f> ItemBox
+                       {:key i
+                        :position (trans-pos pack-coord pack-dims)
+                        :geometry pack-dims
+                        :opacity boxOpacity
+                        :color (rand-color)}]))))]
+
        [:> Grid (merge {:position #js [0 0 0] :args gridSize} grid-props)]
        [:> Environment {:preset "city"}]
        [:> OrbitControls {:makeDefault true}]
@@ -101,12 +105,14 @@
 
         find-best-pack
         (fn [txt]
-          (let [r (->> txt
-                       eb-afit-io/read-input
-                       eb-afit/find-best-pack)]
+          (let [i (eb-afit-io/read-input txt)
+                r (eb-afit/find-best-pack i)
+                r (eb-afit/exec-iteration-on-pallet-variant-with-layer
+                   (:pallet-variant r) (:layer r) i
+                   {:packing-order []})]
             (reset! packed-res r)))]
 
-    ;; initialize with sample input's packing found.
+;; initialize with sample input's packing found.
     (find-best-pack @input-txt)
 
     (fn []

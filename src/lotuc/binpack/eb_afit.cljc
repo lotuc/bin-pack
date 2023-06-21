@@ -216,7 +216,7 @@
             (recur (next-box-type i) best-fits')))))))
 
 (defn apply-volume-check
-  [{:keys [packed-y boxes box-packed smallest-z scrap-pad] :as state}
+  [{:keys [packed-y boxes box-packed smallest-z scrap-pad packing-order] :as state}
    {:keys [index dims] :as found-box}
    {:keys [box-volume pallet-volume] :as input}]
   (let [box-vol
@@ -232,7 +232,8 @@
             (assoc-in [:boxes index :pack-dims] dims)
             (assoc-in [:boxes index :pack-coord] [cox coy coz])
             (update :packed-volume #(+ (or % 0) box-vol))
-            (update :packed-number #(inc (or % 0))))]
+            (update :packed-number #(inc (or % 0)))
+            (update :packing-order conj {:pack-dims dims :pack-coord [cox coy coz]}))]
 
     #?(:clj (aset ^booleans box-packed index true))
 
@@ -450,9 +451,11 @@
              (recur (unchecked-inc z) r)
              (let [[dx dy dz] (:dims (boxes z))]
                (recur (unchecked-inc z)
-                      (min (abs (unchecked-subtract exdim dx))
-                           (abs (unchecked-subtract exdim dy))
-                           (abs (unchecked-subtract exdim dz))))))
+                      (unchecked-add
+                       r
+                       (min (abs (unchecked-subtract exdim dx))
+                            (abs (unchecked-subtract exdim dy))
+                            (abs (unchecked-subtract exdim dz)))))))
            r)))))
 
 (defn find-layer
@@ -460,21 +463,20 @@
     [^long px _py ^long pz] :pallet
     :as state}]
   (let [[_ layer-thickness]
-        #?(:default
-           (->> (for [^long x (range (count boxes))
-                      [^long exdim ^long dim2 ^long dim3] (rotate-dim1 (:dims (boxes x)))
-                      :when (and (not (:pack-dims (boxes x)))
-                                 (<= exdim remain-py)
-                                 (or (and (<= dim2 px) (< dim3 pz))
-                                     (and (<= dim3 px) (< dim2 pz))))
-                      :let [layer-weight (calc-layer-weight state x exdim)]]
+        (->> (for [^long x (range (count boxes))
+                   [^long exdim ^long dim2 ^long dim3] (rotate-dim1 (:dims (boxes x)))
+                   :when (and (not (:pack-dims (boxes x)))
+                              (<= exdim remain-py)
+                              (or (and (<= dim2 px) (< dim3 pz))
+                                  (and (<= dim3 px) (< dim2 pz))))
+                   :let [layer-weight (calc-layer-weight state x exdim)]]
 
-                  [layer-weight exdim])
-                (reduce (fn [[weight exdim] [new-weight new-exdim]]
-                          (if (< new-weight weight)
-                            [new-weight new-exdim]
-                            [weight exdim]))
-                        [1000000 0])))]
+               [layer-weight exdim])
+             (reduce (fn [[weight exdim] [new-weight new-exdim]]
+                       (if (< new-weight weight)
+                         [new-weight new-exdim]
+                         [weight exdim]))
+                     [1000000 0]))]
     (if (or (= layer-thickness 0) (> layer-thickness remain-py))
       {:packing false}
       {:packing true :layer-thickness layer-thickness})))
@@ -530,7 +532,8 @@
 (defn exec-iteration-on-pallet-variant-with-layer
   [pallet-variant
    {:keys [dim] :as layer}
-   {:keys [boxes box-xs box-volume pallet-volume] :as input}]
+   {:keys [boxes box-xs box-volume pallet-volume] :as input}
+   & {:keys [packing-order]}]
   (let [[_px py pz] pallet-variant
 
         ;; optimization fields using java native array.
@@ -542,15 +545,15 @@
            :default nil)
 
         init-state
-        (merge
-         {:boxes boxes
-          :layer-thickness dim
-          :packed-y 0
-          :remain-pz pz
-          :remain-py py
-          :layer-in-layer nil
-          :pallet pallet-variant}
-         java-optimization-fields)]
+        (cond-> {:boxes boxes
+                 :layer-thickness dim
+                 :packed-y 0
+                 :remain-pz pz
+                 :remain-py py
+                 :layer-in-layer nil
+                 :pallet pallet-variant}
+          java-optimization-fields (merge java-optimization-fields)
+          packing-order (assoc :packing-order (vec packing-order)))]
 
     (loop [state init-state]
       (let [{:keys [packed-y layer-thickness
