@@ -9,35 +9,139 @@
    [lotuc.binpack.eb-afit-io-test :as eb-afit-io-test]))
 
 (deftest apply-found-box-test
+  ;; new box will attach to the taller side.
+
   (testing "smallest-z gap is the only gap"
     (is (= [{:cumx 20 :cumz 20}]
            (eb-afit/apply-found-box
-            {:scrap-pad [{:cumx 20 :cumz 10}]
-             :smallest-z 0}
-            {:dims [20 10 10]}))))
-
-  (testing "smallest-z gap has gap on right side."
-    (is (= [{:cumx 20, :cumz 10}]
+            {:smallest-z 0 :scrap-pad [{:cumx 20 :cumz 10}]}
+            {:dims [20 10 10]})))
+    (is (= [{:cumx 10 :cumz 20} {:cumx 20 :cumz 10}]
            (eb-afit/apply-found-box
-            {:smallest-z 0 :scrap-pad [{:cumx 5 :cumz 5} {:cumx 20 :cumz 10}]}
-            {:dims [5 11 5]}))
-        "x direction is filled -> merge to right")
-    (is (= [{:cumx 5, :cumz 8} {:cumx 20, :cumz 10}]
-           (eb-afit/apply-found-box
-            {:smallest-z 0 :scrap-pad [{:cumx 5 :cumz 5} {:cumx 20 :cumz 10}]}
-            {:dims [5 11 3]}))
-        "x direction is filled")
-    (is (= [{:cumx 4, :cumz 8} {:cumx 5, :cumz 5} {:cumx 20, :cumz 10}]
-           (eb-afit/apply-found-box
-            {:smallest-z 0 :scrap-pad [{:cumx 5 :cumz 5} {:cumx 20 :cumz 10}]}
-            {:dims [4 11 3]}))
-        "x direction is not filled"))
+            {:smallest-z 0 :scrap-pad [{:cumx 20 :cumz 10}]}
+            {:dims [10 10 10]}))))
 
-  ;; todo
-  (testing "smallest-z gap has gap on left side.")
+  (testing "smallest-z gap only got right side gaps"
+    (testing "right gap higher - attach to right"
+      (is (= [{:cumx 5 :cumz 5} {:cumx 10 :cumz 15} {:cumx 20 :cumz 10}]
+             (eb-afit/apply-found-box
+              {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+              {:dims [5 10 10]}))
+          "x not filled - z not evened - higher")
+      (is (= [{:cumx 5 :cumz 5} {:cumx 10 :cumz 8} {:cumx 20 :cumz 10}]
+             (eb-afit/apply-found-box
+              {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+              {:dims [5 10 3]}))
+          "x not filled - z not evened - lower")
+      (is (= [{:cumx 5 :cumz 5} {:cumx 20 :cumz 10}]
+             (eb-afit/apply-found-box
+              {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+              {:dims [5 10 5]}))
+          "x not filled - z evened"))
 
-  ;; todo
-  (testing "smallest-z gap has gap on both side."))
+    (testing "left gap higher - attach to left"
+      (is (= [{:cumx 10 :cumz 10} {:cumx 13 :cumz 15} {:cumx 20 :cumz 5}]
+             (eb-afit/apply-found-box
+              {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
+              {:dims [3 10 10]}))
+          "x not filled - z not evened - higher")
+      (is (= [{:cumx 10 :cumz 10} {:cumx 13 :cumz 8} {:cumx 20 :cumz 5}]
+             (eb-afit/apply-found-box
+              {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
+              {:dims [3 10 3]}))
+          "x not filled - z not evened - lower")
+      (is (= [{:cumx 20 :cumz 10}]
+             (eb-afit/apply-found-box
+              {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
+              {:dims [10 10 5]}))
+          "x not filled - z evened"))
+
+    (is (= [{:cumx 10 :cumz 15} {:cumx 20 :cumz 10}]
+           (eb-afit/apply-found-box
+            {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+            {:dims [10 10 10]}))
+        "x filled - z not evened - higher")
+    (is (= [{:cumx 10 :cumz 8} {:cumx 20 :cumz 10}]
+           (eb-afit/apply-found-box
+            {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+            {:dims [10 10 3]}))
+        "x filled - z not evened - lower")
+    (is (= [{:cumx 20 :cumz 10}]
+           (eb-afit/apply-found-box
+            {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
+            {:dims [10 10 5]}))
+        "x filled - z evened"))
+
+  (testing "smallest-z gap only got left side gaps"
+    (is (= [{:cumx 5 :cumz 10} {:cumx 7 :cumz 7} {:cumx 10 :cumz 5}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [2 10 2]}))
+        "x not filled & lower")
+    (is (= [{:cumx 5 :cumz 10} {:cumx 7 :cumz 12} {:cumx 10 :cumz 5}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [2 10 7]}))
+        "x not filled & higher")
+    (is (= [{:cumx 7 :cumz 10} {:cumx 10 :cumz 5}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [2 10 5]}))
+        "x not filled & evened")
+
+    (is (= [{:cumx 5 :cumz 10} {:cumx 10 :cumz 7}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [5 10 2]}))
+        "x filled & lower")
+    (is (= [{:cumx 5 :cumz 10} {:cumx 10 :cumz 12}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [5 10 7]}))
+        "x not filled & higher")
+    (is (= [{:cumx 10 :cumz 10}]
+           (eb-afit/apply-found-box
+            {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
+            {:dims [5 10 5]}))
+        "x not filled & evened")))
+
+(deftest find-smallest-z-test
+  (testing "find smallest-z"
+    (is (= nil (eb-afit/find-smallest-z [])))
+    (is (= 0 (eb-afit/find-smallest-z [{:cumx 5 :cumz 10}])))
+    (is (= 1 (eb-afit/find-smallest-z [{:cumx 5 :cumz 10}
+                                       {:cumx 7 :cumz 9}])))
+    (is (= 2 (eb-afit/find-smallest-z [{:cumx 5 :cumz 10}
+                                       {:cumx 7 :cumz 9}
+                                       {:cumx 8 :cumz 8}])))
+    (is (= 2 (eb-afit/find-smallest-z [{:cumx 5 :cumz 10}
+                                       {:cumx 7 :cumz 9}
+                                       {:cumx 8 :cumz 8}
+                                       {:cumx 8 :cumz 9}])))))
+
+(deftest get-smallest-z-gap-geo-test
+  (testing "find smallest-z gap's geo"
+    (is (= {:hmx 10 :hy 10 :hmy 20 :hz 15 :hmz 15}
+           (eb-afit/get-smallest-z-gap-geo
+            {:scrap-pad [{:cumx 10 :cumz 5}]
+             :layer-thickness 10
+             :remain-pz 20
+             :remain-py 20
+             :smallest-z 0})))
+    (is (= {:hmx 5 :hy 10 :hmy 20 :hz 3 :hmz 15}
+           (eb-afit/get-smallest-z-gap-geo
+            {:scrap-pad [{:cumx 5 :cumz 8} {:cumx 10 :cumz 5}]
+             :layer-thickness 10
+             :remain-pz 20
+             :remain-py 20
+             :smallest-z 1})))
+    (is (= {:hmx 10 :hy 10 :hmy 20 :hz 2 :hmz 15}
+           (eb-afit/get-smallest-z-gap-geo
+            {:scrap-pad [{:cumx 10 :cumz 5} {:cumx 15 :cumz 7}]
+             :layer-thickness 10
+             :remain-pz 20
+             :remain-py 20
+             :smallest-z 0})))))
 
 (deftest apply-ignore-gap-test
   (testing "the gap to ignore is in middle"
@@ -48,7 +152,16 @@
                          {:cumx 104, :cumz 84}]
              :smallest-z 1}))
         "pre & pos's cumz is equal")
-    (is (= [{:cumx 36, :cumz 90}
+    (is (= [{:cumx 20 :cumz 30} {:cumx 104, :cumz 84} {:cumx 20 :cumz 30}]
+           (eb-afit/apply-ignore-gap
+            {:scrap-pad [{:cumx 20 :cumz 30}
+                         {:cumx 30, :cumz 84}
+                         {:cumx 36, :cumz 77}
+                         {:cumx 104, :cumz 84}
+                         {:cumx 20 :cumz 30}]
+             :smallest-z 2}))
+        "pre & pos's cumz is equal")
+    (is (= [{:cumx 30, :cumz 90}
             {:cumx 104, :cumz 84}]
            (eb-afit/apply-ignore-gap
             {:scrap-pad [{:cumx 30, :cumz 90}
@@ -64,6 +177,36 @@
                          {:cumx 104, :cumz 84}]
              :smallest-z 1}))
         "pre cumz < pos cumz")))
+
+(deftest find-box-test
+  (testing "find-box"
+
+    (eb-afit/find-box
+     {:hmx 84 :hy 45 :hmy 104 :hz 96 :hmz 96}
+     (:boxes (-> "3d-bin-pack-test/dpp04.txt"
+                 eb-afit-io/read-input-from-resource)))
+
+    (eb-afit/find-box
+     {:hmx 21 :hy 14 :hmy 104 :hz 7 :hmz 59}
+     (-> (:boxes (-> "3d-bin-pack-test/dpp05.txt"
+                     eb-afit-io/read-input-from-resource))
+         (assoc-in [50 :pack-dims]  1)
+         (assoc-in [51 :pack-dims]  1)
+         (assoc-in [52 :pack-dims]  1)
+         (assoc-in [53 :pack-dims]  1)
+         (assoc-in [54 :pack-dims]  1)
+         (assoc-in [55 :pack-dims]  1)
+         (assoc-in [56 :pack-dims]  1)))
+
+    (is true)))
+
+(deftest list-candit-layers-test
+  (testing "List candit layers"
+    (-> (eb-afit/list-candit-layers
+         (-> "3d-bin-pack-test/dpp04.txt"
+             eb-afit-io/read-input-from-resource)
+         [84 104 96])
+        eb-afit/sort-layers)))
 
 (deftest calc-layer-weight-perf-test
   (testing "calc-layer-weight perf"
@@ -113,7 +256,7 @@
              (select-keys r [:percentage-used]))
     (pprint/pprint (-> r
                        (dissoc :input :pack)
-                       (assoc :total-number (count (:input r)))))
+                       (assoc :total-number (count (:boxes (:input r))))))
     (is (some? r) (str "find-best-pack " resource-name-or-file))))
 
 (deftest find-best-dpp-input-test
