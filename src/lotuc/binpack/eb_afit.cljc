@@ -233,7 +233,6 @@
             (assoc-in [:boxes index :pack-coord] [cox coy coz])
             (update :packed-volume #(+ (or % 0) box-vol))
             (update :packed-number #(inc (or % 0))))]
-    #_#?(:clj (printf "packing: (%s %s %s)\n" (dims 0) (dims 1) (dims 2)))
 
     #?(:clj (aset ^booleans box-packed index true))
 
@@ -417,21 +416,6 @@
 
             [state' {:keys [layer-done? ignore-gap? c-box]}]
             (-> found (check-found state))]
-        #_#?(:clj (let [{:keys [hmx hy hmy hz hmz]} smallest-z-gap-geo]
-                    (printf (str "find box (%s) hmx=%s hy=%s hmy=%s hz=%s hmz=%s "
-                                 "-> (%s %s %s) (%s %s %s)\n")
-                            (:layer-thickness state) hmx hy hmy hz hmz
-                            (get-in found [:box :dims 0])
-                            (get-in found [:box :dims 1])
-                            (get-in found [:box :dims 2])
-
-                            (get-in found [:b-box :dims 0])
-                            (get-in found [:b-box :dims 1])
-                            (get-in found [:b-box :dims 2]))
-                    (printf "  >> ")
-                    (doseq [t scrap-pad]
-                      (printf "%d %d, " (:cumx t) (:cumz t)))
-                    (printf "\n")))
         (if layer-done?
           state'
           (recur (cond-> state'
@@ -599,7 +583,7 @@
 
             state'''
             (assoc state'' :layer-thickness layer-thickness)]
-        #_#?(:clj (printf "find layer - %d (%d)\n" layer-thickness remain-py))
+
         (if packing
           (recur state''')
           state''')))))
