@@ -7,4 +7,4 @@ The visualizer is mainly built with
 You can find a deployed version of this visualizer at
 https://lotuc.org/bin-pack/.
 
-![](./doc/resources/bin-pack-sample-visualization-0.png)
+![](./visualizer/doc/resources/eb-afit-find-best-dpp06.gif)
