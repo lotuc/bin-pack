@@ -8,99 +8,109 @@
    [lotuc.binpack.eb-afit-io :as eb-afit-io]
    [lotuc.binpack.eb-afit-io-test :as eb-afit-io-test]))
 
+(defn- apply-found-box-get-scrap-pad
+  [{:keys [scrap-pad smallest-z]} box]
+  (:scrap-pad
+   (eb-afit/apply-found-box
+    {:smallest-z smallest-z :scrap-pad scrap-pad
+     :boxes [{:vol 1}]
+     :box-packed (make-array java.lang.Boolean/TYPE 1)}
+    (assoc box :index 0)
+    {})))
+
 (deftest apply-found-box-test
   ;; new box will attach to the taller side.
 
   (testing "smallest-z gap is the only gap"
     (is (= [{:cumx 20 :cumz 20}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 0 :scrap-pad [{:cumx 20 :cumz 10}]}
             {:dims [20 10 10]})))
     (is (= [{:cumx 10 :cumz 20} {:cumx 20 :cumz 10}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 0 :scrap-pad [{:cumx 20 :cumz 10}]}
             {:dims [10 10 10]}))))
 
   (testing "smallest-z gap only got right side gaps"
     (testing "right gap higher - attach to right"
       (is (= [{:cumx 5 :cumz 5} {:cumx 10 :cumz 15} {:cumx 20 :cumz 10}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
               {:dims [5 10 10]}))
           "x not filled - z not evened - higher")
       (is (= [{:cumx 5 :cumz 5} {:cumx 10 :cumz 8} {:cumx 20 :cumz 10}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
               {:dims [5 10 3]}))
           "x not filled - z not evened - lower")
       (is (= [{:cumx 5 :cumz 5} {:cumx 20 :cumz 10}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
               {:dims [5 10 5]}))
           "x not filled - z evened"))
 
     (testing "left gap higher - attach to left"
       (is (= [{:cumx 10 :cumz 10} {:cumx 13 :cumz 15} {:cumx 20 :cumz 5}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
               {:dims [3 10 10]}))
           "x not filled - z not evened - higher")
       (is (= [{:cumx 10 :cumz 10} {:cumx 13 :cumz 8} {:cumx 20 :cumz 5}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
               {:dims [3 10 3]}))
           "x not filled - z not evened - lower")
       (is (= [{:cumx 20 :cumz 10}]
-             (eb-afit/apply-found-box
+             (apply-found-box-get-scrap-pad
               {:smallest-z 1 :scrap-pad [{:cumx 10 :cumz 10} {:cumx 20 :cumz 5}]}
               {:dims [10 10 5]}))
           "x not filled - z evened"))
 
     (is (= [{:cumx 10 :cumz 15} {:cumx 20 :cumz 10}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
             {:dims [10 10 10]}))
         "x filled - z not evened - higher")
     (is (= [{:cumx 10 :cumz 8} {:cumx 20 :cumz 10}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
             {:dims [10 10 3]}))
         "x filled - z not evened - lower")
     (is (= [{:cumx 20 :cumz 10}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 0 :scrap-pad [{:cumx 10 :cumz 5} {:cumx 20 :cumz 10}]}
             {:dims [10 10 5]}))
         "x filled - z evened"))
 
   (testing "smallest-z gap only got left side gaps"
     (is (= [{:cumx 5 :cumz 10} {:cumx 7 :cumz 7} {:cumx 10 :cumz 5}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [2 10 2]}))
         "x not filled & lower")
     (is (= [{:cumx 5 :cumz 10} {:cumx 7 :cumz 12} {:cumx 10 :cumz 5}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [2 10 7]}))
         "x not filled & higher")
     (is (= [{:cumx 7 :cumz 10} {:cumx 10 :cumz 5}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [2 10 5]}))
         "x not filled & evened")
 
     (is (= [{:cumx 5 :cumz 10} {:cumx 10 :cumz 7}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [5 10 2]}))
         "x filled & lower")
     (is (= [{:cumx 5 :cumz 10} {:cumx 10 :cumz 12}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [5 10 7]}))
         "x not filled & higher")
     (is (= [{:cumx 10 :cumz 10}]
-           (eb-afit/apply-found-box
+           (apply-found-box-get-scrap-pad
             {:smallest-z 1 :scrap-pad [{:cumx 5 :cumz 10} {:cumx 10 :cumz 5}]}
             {:dims [5 10 5]}))
         "x not filled & evened")))
@@ -240,39 +250,43 @@
                  (eb-afit/find-layer i1)))))
       (is true))))
 
+(def expected-results
+  (-> (io/resource "expected-pack-res.edn") slurp read-string))
+
+(defn- check-resource-best-result
+  [resource-name-or-file {:keys [percentage-used] :as r}]
+  (when-let [expected (get expected-results resource-name-or-file)]
+    (is (< (abs (- (:percentage-used expected) percentage-used)) 0.00001)
+        (str "expected " (:percentage-used expected) " vs. " percentage-used))
+    (is (= (select-keys r [:packed-volume :packed-number :pallet-variant
+                           :first-layer-thickness])
+           (dissoc expected :percentage-used)))))
+
 (defn- test-find-test-pack-on-resource [resource-name-or-file]
-  (println "start find-best-pack " resource-name-or-file)
+  (println "!! find-best-pack " resource-name-or-file)
   (let [in-txt (if (.exists (io/file resource-name-or-file))
                  (slurp resource-name-or-file)
                  (slurp (io/resource resource-name-or-file)))
+        input (eb-afit-io/read-input in-txt)
         r (atom nil)
-        costs (with-out-str
-                (time
-                 (->> (eb-afit-io/read-input in-txt)
-                      eb-afit/find-best-pack
-                      (reset! r))))
-        r @r]
-    (println "!! " resource-name-or-file "costs " (s/trim costs)
-             (select-keys r [:percentage-used]))
-    (pprint/pprint (-> r
-                       (dissoc :input :pack)
-                       (assoc :total-number (count (:boxes (:input r))))))
-    (is (some? r) (str "find-best-pack " resource-name-or-file))))
+        costs (with-out-str (time (reset! r (eb-afit/find-best-pack input))))
+        r @r
+        r' (-> r
+               (dissoc :pack :unpacked)
+               (assoc :total-number (count (:boxes input)))
+               (assoc :packed-number (count (:pack r))))]
+    (println ">>" resource-name-or-file "costs " (s/trim costs)
+             (s/replace (str "\n" (with-out-str (pprint/pprint r')))
+                        #"\n" "\n   "))
+    (is (some? r) (str "find-best-pack " resource-name-or-file))
+    (check-resource-best-result resource-name-or-file r')))
 
 (deftest find-best-dpp-input-test
-  (is (= [{:dims [10 10 10]
-           :vol 1000
-           :n 1
-           :pack-dims [10 10 10]
-           :pack-coord [0 0 0]}]
-         (-> (eb-afit-io/read-input-from-resource "test-dpp00.txt")
-             eb-afit/exec-iterations
-             :best-pack)))
-
   (testing "can handle dpp** resources"
     (doseq [n (->> eb-afit-io-test/test-resources
                    (filter #(s/includes? % "dpp")))]
-      (test-find-test-pack-on-resource n))))
+      (testing (str ": handle " n)
+        (test-find-test-pack-on-resource n)))))
 
 (deftest ^:find-best-pack find-best-pack-test
   (when-let [resource-name (System/getenv "input_file")]
@@ -282,10 +296,12 @@
   (testing "can handle mpp** resources"
     (doseq [n (->> eb-afit-io-test/test-resources
                    (filter #(s/includes? % "mpp")))]
-      (test-find-test-pack-on-resource n))))
+      (testing (str ": handle " n)
+        (test-find-test-pack-on-resource n)))))
 
 (deftest ^:find-best-pack-large-input find-best-rnd-input-test
   (testing "can handle rnd** resources"
     (doseq [n (->> eb-afit-io-test/test-resources
                    (filter #(s/includes? % "rnd")))]
-      (test-find-test-pack-on-resource n))))
+      (testing (str ": handle " n)
+        (test-find-test-pack-on-resource n)))))

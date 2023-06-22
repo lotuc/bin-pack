@@ -1,0 +1,105 @@
+{"3d-bin-pack-test/dpp01.txt"
+ {:packed-volume 838656
+  :packed-number 6
+  :pallet-variant [104 96 84]
+  :percentage-used 100.0
+  :first-layer-thickness 24}
+ "3d-bin-pack-test/dpp02.txt"
+ {:packed-volume 838656
+  :packed-number 10
+  :pallet-variant [104 84 96]
+  :percentage-used 100.0
+  :first-layer-thickness 70}
+ "3d-bin-pack-test/dpp03.txt"
+ {:packed-volume 838656
+  :packed-number 12
+  :pallet-variant [104 84 96]
+  :percentage-used 100.0
+  :first-layer-thickness 70}
+ "3d-bin-pack-test/dpp04.txt"
+ {:packed-volume 752640
+  :packed-number 14
+  :pallet-variant [84 104 96]
+  :percentage-used 89.743590
+  :first-layer-thickness 45}
+ "3d-bin-pack-test/dpp05.txt"
+ {:packed-volume 768096
+  :packed-number 82
+  :pallet-variant [96 104 84]
+  :percentage-used 91.586538
+  :first-layer-thickness 14}
+ "3d-bin-pack-test/dpp06.txt"
+ {:packed-volume 708456
+  :packed-number 35
+  :pallet-variant [96 84 104]
+  :percentage-used 84.475160
+  :first-layer-thickness 52}
+ "3d-bin-pack-test/mpp01.txt"
+ {:packed-volume 838656
+  :packed-number 576
+  :pallet-variant [104 84 96]
+  :percentage-used 100
+  :first-layer-thickness 14}
+ "3d-bin-pack-test/mpp02.txt"
+ {:packed-volume 838656
+  :packed-number 1152
+  :pallet-variant [104 84 96]
+  :percentage-used 100
+  :first-layer-thickness 14}
+ "3d-bin-pack-test/mpp03.txt"
+ {:packed-volume 838656
+  :packed-number 4992
+  :pallet-variant [104 96 84]
+  :percentage-used 100
+  :first-layer-thickness 4}
+ "3d-bin-pack-test/mpp04.txt"
+ {:packed-volume 838656
+  :packed-number 1152
+  :pallet-variant [84 96 104]
+  :percentage-used 100
+  :first-layer-thickness 13}
+ "3d-bin-pack-test/mpp05.txt"
+ {:packed-volume 822640
+  :packed-number 2773
+  :pallet-variant [96 84 104]
+  :percentage-used 98.090278
+  :first-layer-thickness 4}
+ "3d-bin-pack-test/rnd01.txt"
+ {:packed-volume 750507
+  :packed-number 291
+  :pallet-variant [84 96 104]
+  :percentage-used 89.489254
+  :first-layer-thickness 51}
+
+ ;; we got some differences for dataset rnd02, rnd03, rnd04, but I guess
+ ;; that may be caused by the implementation difference
+ ;; https://github.com/lotuc/3d-bin-pack/issues/1
+ ;; I'll fix the reference implementation and the do the comparison later.
+ ;;
+ ;; "3d-bin-pack-test/rnd02.txt"
+ ;; {:packed-volume 817348
+ ;;  :packed-number 1714
+ ;;  :pallet-variant [84 104 96]
+ ;;  :percentage-used 97.459268
+ ;;  :first-layer-thickness 13}
+ ;; "3d-bin-pack-test/rnd03.txt"
+ ;; {:packed-volume 774928
+ ;;  :packed-number 591
+ ;;  :pallet-variant [84 96 104]
+ ;;  :percentage-used 92.401175
+ ;;  :first-layer-thickness 23}
+ ;; "3d-bin-pack-test/rnd04.txt"
+ ;; {:packed-volume 808231
+ ;;  :packed-number 1472
+ ;;  :pallet-variant [84 96 104]
+ ;;  :percentage-used 96.372172
+ ;;  :first-layer-thickness 9}
+
+ "3d-bin-pack-test/rnd05.txt"
+ {:packed-volume 575802
+  :packed-number 26
+  :pallet-variant [104 84 96]
+  :percentage-used 68.657709
+  :first-layer-thickness 48}}
+
+

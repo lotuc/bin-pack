@@ -31,3 +31,16 @@
                  (some? boxes)
                  (some? box-volume))
             (str "read resource " n))))))
+
+(deftest read-visualdot-test
+  (testing "read visualdot txt"
+    (is (=
+         {:pack
+          [{:pack-coord [0 0 0], :pack-dims [0 0 0]}
+           {:pack-coord [70 0 0], :pack-dims [70 0 0]}
+           {:pack-coord [0 0 24], :pack-dims [0 0 24]}],
+          :pallet [84 104 96]}
+         (eb-afit-io/read-visualdot "   84  104   96
+    0    0    0   70   45   24
+   70    0    0   14   40   48
+    0    0   24   70   45   24")))))

@@ -11,7 +11,12 @@
 
 #?(:clj (set! *unchecked-math* true))
 
+;; assume all dimension value is lower thant this
+;; Integer/MAX_VALUE
+(def MAX_SIZE 2147483647)
+
 (declare exec-iterations)
+(declare exec-iteration-with-pallet-and-layer-thickness)
 
 (defn find-best-pack
   "Find the best packing strategy for given input using the algorithm described in
@@ -23,65 +28,60 @@
   The implementation is a modified version.
 
   Parameter
-  - input
-      - pallet-dims: a vector of the pallet's 3 dimensions [px py pz]
-      - pallet-volume: the pallet volume (* px py pz)
-      - boxes: a vector of boxes, each of its item is
-          - dims: a vector of the box's 3 dimensions [dim1 dim2 dim3]
-          - vol: volume of the box (* dim1 dim2 dim3)
-          - n: represents the count of box with such a dims.
-      - box-volume: the sum of all boxes' vol.
+  - pallet-dims: a vector of the pallet's 3 dimensions [px py pz]
+  - pallet-volume: the pallet volume (* px py pz)
+  - boxes: a vector of boxes, each of its item is
+      - dims: a vector of the box's 3 dimensions [dim1 dim2 dim3]
+      - vol: volume of the box (* dim1 dim2 dim3)
+      - n: represents the count of box with such a dims.
+  - box-volume: the sum of all boxes' vol.
 
   Returns the best packing results
-  - input: same as the parameter
   - packed-volume: sum volume of the packed boxes
   - packed-number: number of boxes packed
-  - pallet-variant: the pack strategy's pallet variant
-  - layer: the pack strategy's initial layer thickness (dim) and its weight
-     (weight).
+  - pallet-variant: pallet orientation varint
+  - first-layer-thickness
   - pack: the packed result, it's the input.boxes with pack result fields (for
     the boxes that are packed)
-
   ```
   (find-best-pack {:pallet-volume 1000,
                    :pallet-dims [10 10 10],
                    :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
                    :box-volume 1000})
   ;; ->
-  {:input
-   {:pallet-volume 1000,
-    :pallet-dims [10 10 10],
-    :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
-    :box-volume 1000},
-   :percentage-used 100.0,
+  {:percentage-used 100,
    :packed-volume 1000,
    :packed-number 1,
    :pallet-variant [10 10 10],
-   :layer {:weight 0, :dim 10},
+   :first-layer-thickness 10,
    :pack
    [{:dims [10 10 10],
      :vol 1000,
      :n 1,
      :pack-dims [10 10 10],
-   :pack-coord [0 0 0]}]}
-  ```
-  "
+     :pack-coord [0 0 0]}]}
+  ```"
   [input]
-  (-> (exec-iterations input)
-      (set/rename-keys
-       {:best-volume :packed-volume
-        :best-packed-number :packed-number
-        :best-pallet-variant :pallet-variant
-        :best-layer :layer
-        :best-pack :pack})))
+  (let [{:keys [best-pack best-layer best-pallet-variant]
+         :as r}
+        (exec-iterations input)
 
-(comment
-  #_{:clj-kondo/ignore [:unresolved-namespace]}
-  (-> (lotuc.binpack.eb-afit-io/read-input-from-resource
-       "3d-bin-pack-test/dpp04.txt")
-      find-best-pack))
+        {pack :packing-order-boxes :as r1}
+        (exec-iteration-with-pallet-and-layer-thickness
+         best-pallet-variant best-layer input {:packing-order-boxes []})
 
-(def MAX_SIZE 32767)
+        unpacked
+        (->> best-pack (filter (complement :pack-dims)) (into []))]
+    (-> r
+        (set/rename-keys
+         {:best-volume :packed-volume
+          :best-packed-number :packed-number
+          :best-pallet-variant :pallet-variant})
+        (select-keys [:packed-volume :packed-number :pallet-variant
+                      :percentage-used])
+        (assoc :first-layer-thickness (get-in r [:best-layer :dim])
+               :pack pack
+               :unpacked unpacked))))
 
 (defn make-rotation
   ([[x y z] variant]
@@ -143,14 +143,13 @@
 
   Figure 3-6: Findbox Function parameters.
 
-  - gap: the gap paraemters
+  - gap-geo: the gap geometry paraemters
   - box: the box analyzing
   - best-fits: best fits up to current
       - bf: the box fits in the current layer
       - b-bf: the box exceeds the current layer
   "
-  [{:keys [hmx hy hmy hz hmz]
-    :as gap}
+  [{:keys [hmx hy hmy hz hmz] :as gap-geo}
    {:keys [bf b-bf]
     [bfx   bfy   bfz] :box-fits
     [b-bfx b-bfy b-bfz] :b-box-fits
@@ -173,10 +172,10 @@
            {:b-box box :b-box-fits [(- hmx dim1) bfy' (abs (- hz dim3))]}))))))
 
 (defn analyze-box-with-rotation
-  [gap best-fits {:keys [dims] :as box}]
+  [gap-geo best-fits {:keys [dims] :as box}]
   (->> (range (if (cube? dims) 1 6))
        (map #(update box :dims make-rotation %))
-       (reduce (partial analyze-box gap) best-fits)))
+       (reduce (partial analyze-box gap-geo) best-fits)))
 
 (defn find-box
   "FINDS THE MOST PROPER BOXES BY LOOKING AT ALL SIX POSSIBLE ORIENTATIONS, EMPTY
@@ -212,18 +211,33 @@
         (if (or (nil? b) (>= i tbn))
           best-fits
           (let [best-fits' (if pack-dims best-fits
-                               (analyze-box-with-rotation smallest-z-gap-geo best-fits b))]
+                               (analyze-box-with-rotation
+                                smallest-z-gap-geo best-fits b))]
             (recur (next-box-type i) best-fits')))))))
 
-(defn apply-volume-check
-  [{:keys [packed-y boxes box-packed smallest-z scrap-pad packing-order] :as state}
-   {:keys [index dims] :as found-box}
+(defn apply-found-box-to-pack
+  [{:keys [packed-y boxes box-packed smallest-z scrap-pad
+           packing-order-boxes]
+    :as state}
+   {:keys [^long depth-left ^long depth-right]
+    {:keys [^long index dims]} :found-box}
    {:keys [box-volume pallet-volume] :as input}]
   (let [box-vol
         (get-in boxes [index :vol])
 
-        cox (if (zero? smallest-z)
-              0 (get-in scrap-pad [(dec smallest-z) :cumx]))
+        cox
+        (cond
+          (= (count scrap-pad) 1) 0
+
+          ;; attach to right
+          (> depth-right depth-left)
+          (let [cumx (:cumx (scrap-pad smallest-z))
+                dimx (dims 0)]
+            (- cumx dimx))
+
+          ;; attach to left
+          :else
+          (:cumx (scrap-pad (dec smallest-z))))
         coz (get-in scrap-pad [smallest-z :cumz])
         coy packed-y
 
@@ -232,8 +246,14 @@
             (assoc-in [:boxes index :pack-dims] dims)
             (assoc-in [:boxes index :pack-coord] [cox coy coz])
             (update :packed-volume #(+ (or % 0) box-vol))
-            (update :packed-number #(inc (or % 0)))
-            (update :packing-order conj {:pack-dims dims :pack-coord [cox coy coz]}))]
+            (update :packed-number #(inc (or % 0))))
+
+        state'
+        (cond-> state'
+          packing-order-boxes
+          (update :packing-order-boxes conj
+                  (merge {:pack-dims dims :pack-coord [cox coy coz]}
+                         (boxes index))))]
 
     #?(:clj (aset ^booleans box-packed index true))
 
@@ -241,54 +261,77 @@
       (or (= packed-volume box-volume) (= packed-volume pallet-volume))
       (assoc :packing false :hundred-percent? true))))
 
-(defn apply-found-box
+(defn apply-found-box-to-scrap-pad
   [{:keys [smallest-z scrap-pad] :as state}
-   {:keys [index] [dimx _ dimz] :dims :as found-box}]
+   {:keys [scrap-pad-left scrap-pad-right
+           ^long depth-left ^long depth-right ^boolean gap-filled?]
+    {:keys [index] [dimx _ dimz] :dims} :found-box}]
   (let [{:keys [cumx cumz] :as smallest-z-gap} (scrap-pad smallest-z)
-
-        scrap-pad-before (subvec scrap-pad 0 smallest-z)
-        scrap-pad-after (subvec scrap-pad (inc smallest-z))
-
-        {pre-cumx :cumx pre-cumz :cumz :as pre} (last scrap-pad-before)
-        {pos-cumz :cumz :as pos} (first scrap-pad-after)
-
-        left-depth (if pre (- pre-cumz cumz) 0)
-        right-depth (if pos (- pos-cumz cumz) 0)
-
-        gap-filled? (= (+ (or pre-cumx 0) dimx) cumx)]
-    (if (> right-depth left-depth)
+        {pre-cumx :cumx} (last scrap-pad-left)]
+    (if (> depth-right depth-left)
 
       ;; new box attach to right
       (into
        ;; left side of the new box (the left top point)
        (if gap-filled?
-         (if (= dimz left-depth)
-           (into [] (drop-last scrap-pad-before))
-           scrap-pad-before)
-         (conj scrap-pad-before {:cumx (- cumx dimx) :cumz cumz}))
+         (if (= dimz depth-left)
+           (into [] (drop-last scrap-pad-left))
+           scrap-pad-left)
+         (conj scrap-pad-left {:cumx (- cumx dimx) :cumz cumz}))
 
        ;; right side of the new box (the right top point)
-       (if (= dimz right-depth)
-         scrap-pad-after
+       (if (= dimz depth-right)
+         scrap-pad-right
          (into [{:cumx cumx :cumz (+ cumz dimz)}]
-               scrap-pad-after)))
+               scrap-pad-right)))
 
       ;; else new box attach to left
       (into
        ;; left side of the new box
-       (if (= dimz left-depth)
-         (into [] (drop-last scrap-pad-before))
-         scrap-pad-before)
+       (if (= dimz depth-left)
+         (into [] (drop-last scrap-pad-left))
+         scrap-pad-left)
        ;; right side of the new box
        (if gap-filled?
          ;; the box is evening the gap
-         (if (= dimz right-depth)
-           scrap-pad-after
-           (into [{:cumx cumx :cumz (+ cumz dimz)}] scrap-pad-after))
-         (into [{:cumx (+ (or pre-cumx 0) dimx) :cumz (+ cumz dimz)} smallest-z-gap]
-               scrap-pad-after))))))
+         (if (= dimz depth-right)
+           scrap-pad-right
+           (into [{:cumx cumx :cumz (+ cumz dimz)}] scrap-pad-right))
+         (into [{:cumx (+ (or pre-cumx 0) dimx)
+                 :cumz (+ cumz dimz)} smallest-z-gap]
+               scrap-pad-right))))))
+
+(defn apply-found-box
+  [{:keys [smallest-z scrap-pad] :as state}
+   {:keys [index] [dimx _ _] :dims :as found-box}
+   {:keys [box-volume pallet-volume] :as input}]
+  (let [{:keys [cumx cumz] :as smallest-z-gap} (scrap-pad smallest-z)
+
+        scrap-pad-left (subvec scrap-pad 0 smallest-z)
+        scrap-pad-right (subvec scrap-pad (inc smallest-z))
+
+        {pre-cumx :cumx pre-cumz :cumz :as pre} (last scrap-pad-left)
+        {pos-cumz :cumz :as pos} (first scrap-pad-right)
+
+        depth-left (if pre (- pre-cumz cumz) 0)
+        depth-right (if pos (- pos-cumz cumz) 0)
+        gap-filled? (= (+ (or pre-cumx 0) dimx) cumx)
+
+        x {:scrap-pad-left scrap-pad-left
+           :scrap-pad-right scrap-pad-right
+           :depth-left depth-left
+           :depth-right depth-right
+           :gap-filled? gap-filled?
+           :found-box found-box}
+
+        scrap-pad'
+        (apply-found-box-to-scrap-pad state x)]
+
+    (-> (apply-found-box-to-pack state x input)
+        (assoc :scrap-pad scrap-pad'))))
 
 (defn apply-ignore-gap
+  "return a new scrap-pad with the smallest-z gap evened."
   [{:keys [smallest-z scrap-pad] :as state}]
   (cond
     (= 1 (count scrap-pad))
@@ -325,7 +368,7 @@
         (into scrap-pad-before scrap-pad-after)))))
 
 (defn check-found
-  "returns [state', {layer-done? ignore-gap? c-box}]."
+  "returns [layer-in-layer-updates, {layer-done? ignore-gap? c-box}]."
   [{:keys [box b-box]
     :as find-box-res}
    {:keys [layer-thickness smallest-z scrap-pad
@@ -334,7 +377,7 @@
   (cond
     ;; found a box and its thickness fits in current layer.
     box
-    [state {:c-box box}]
+    [nil {:c-box box}]
 
     ;; found a box which is higher than current thickness
     ;; 1. if we are already in layer-in-layer mode, update lil params
@@ -345,22 +388,21 @@
           layer-in-layer-z (if layer-in-layer layer-in-layer-z
                                (get-in scrap-pad [smallest-z :cumz]))
           layer-in-layer (- (+ (or layer-in-layer 0) b-box-y) layer-thickness)]
-      [(assoc state
-              :layer-in-layer layer-in-layer
-              :layer-thickness b-box-y
-              :pre-layer pre-layer
-              :layer-in-layer-z layer-in-layer-z)
+      [{:layer-in-layer layer-in-layer
+        :layer-thickness b-box-y
+        :pre-layer pre-layer
+        :layer-in-layer-z layer-in-layer-z}
        {:c-box b-box}])
 
     ;; notice the condition indicates (nil? b-box), meaning no box found (even
     ;; the one exceeds current layer thickness), meaning that the layer is done.
     (= 1 (count scrap-pad))
-    [state {:layer-done? true}]
+    [nil {:layer-done? true}]
 
     ;; gap is not evened, but we can only find box which exceeds current layer
     ;; thickness, just ignore (even) the gap
     :else
-    [state {:ignore-gap? true}]))
+    [nil {:ignore-gap? true}]))
 
 (defn get-smallest-z-gap-geo
   [{:keys [scrap-pad boxes layer-thickness remain-pz remain-py smallest-z]}]
@@ -412,17 +454,22 @@
     (loop [{:keys [scrap-pad boxes] :as state} init-state]
       (let [smallest-z (find-smallest-z scrap-pad)
             state (assoc state :smallest-z smallest-z)
-            smallest-z-gap-geo (get-smallest-z-gap-geo state)
-            found (find-box smallest-z-gap-geo boxes)
 
-            [state' {:keys [layer-done? ignore-gap? c-box]}]
-            (-> found (check-found state))]
-        (if layer-done?
-          state'
-          (recur (cond-> state'
-                   ignore-gap? (assoc :scrap-pad (apply-ignore-gap state'))
-                   c-box (apply-volume-check c-box input)
-                   c-box (assoc :scrap-pad (apply-found-box state' c-box)))))))))
+            found (-> (get-smallest-z-gap-geo state)
+                      (find-box boxes))
+
+            [layer-in-layer-state {:keys [layer-done? ignore-gap? c-box] :as r}]
+            (check-found found state)
+
+            state' (merge state layer-in-layer-state)]
+        (cond
+          c-box
+          (recur (apply-found-box state' c-box input))
+          ignore-gap?
+          (recur (assoc state' :scrap-pad (apply-ignore-gap state')))
+
+          layer-done? state'
+          :else (throw (ex-info "illegal state" r)))))))
 
 (defn calc-layer-weight
   [{:keys [boxes box-xs box-ys box-zs box-packed]} ^long x ^long exdim]
@@ -482,7 +529,7 @@
       {:packing true :layer-thickness layer-thickness})))
 
 (declare exec-iteration-on-pallet-variant)
-(declare exec-iteration-on-pallet-variant-with-layer)
+(declare exec-iteration-with-pallet-and-layer-thickness)
 
 (defn exec-iteration-on-pallet-variant
   [{:as pallet-variant-state}
@@ -495,7 +542,7 @@
          pallet-variant-state]
     (if layer
       (let [{:keys [packed-volume packed-number boxes hundred-percent?] :as s}
-            (exec-iteration-on-pallet-variant-with-layer
+            (exec-iteration-with-pallet-and-layer-thickness
              pallet-variant layer input)
 
             state'
@@ -509,7 +556,7 @@
                :input input}
               state)]
         (if hundred-percent?
-          state'
+          (assoc state' :hundred-percent? true)
           (recur rest-layers state')))
       state)))
 
@@ -529,11 +576,11 @@
              :box-zs box-zs})
      :default nil))
 
-(defn exec-iteration-on-pallet-variant-with-layer
+(defn exec-iteration-with-pallet-and-layer-thickness
   [pallet-variant
    {:keys [dim] :as layer}
    {:keys [boxes box-xs box-volume pallet-volume] :as input}
-   & {:keys [packing-order]}]
+   & {:keys [packing-order-boxes]}]
   (let [[_px py pz] pallet-variant
 
         ;; optimization fields using java native array.
@@ -553,7 +600,8 @@
                  :layer-in-layer nil
                  :pallet pallet-variant}
           java-optimization-fields (merge java-optimization-fields)
-          packing-order (assoc :packing-order (vec packing-order)))]
+          packing-order-boxes
+          (assoc :packing-order-boxes (vec packing-order-boxes)))]
 
     (loop [state init-state]
       (let [{:keys [packed-y layer-thickness
@@ -561,44 +609,36 @@
              :as state'}
             (pack-layer state input)
 
-            packed-y (+ packed-y layer-thickness)
-            remain-py (- py packed-y)
-
-            state''
+            state'
             (if layer-in-layer
-              (merge
-               (pack-layer
-                (merge state'
-                       {:remain-py (- layer-thickness pre-layer)
-                        :packed-y (+ (- packed-y layer-thickness) pre-layer)
-                        :remain-pz layer-in-layer-z
-                        :layer-thickness layer-in-layer})
-                input)
-               {:packed-y packed-y
-                :remain-py remain-py
-                :remain-pz pz})
-              (assoc state'
-                     :packed-y packed-y
-                     :remain-py remain-py))
+              (pack-layer
+               (merge state' {:remain-py (- layer-thickness pre-layer)
+                              :packed-y (+ pre-layer packed-y)
+                              :remain-pz layer-in-layer-z
+                              :layer-thickness layer-in-layer})
+               input)
+              state')
+
+            packed-y' (+ packed-y layer-thickness)
+            remain-py' (- py packed-y')
+
+            state'
+            (assoc state'
+                   :packed-y packed-y'
+                   :remain-py remain-py'
+                   :remain-pz pz)
 
             {:keys [packing layer-thickness]}
-            (find-layer state'')
+            (find-layer state')
 
             state'''
-            (assoc state'' :layer-thickness layer-thickness)]
+            (-> state'
+                (assoc :layer-thickness layer-thickness)
+                (dissoc :layer-in-layer))]
 
         (if packing
           (recur state''')
           state''')))))
-
-#_{:clj-kondo/ignore [:unresolved-namespace]}
-(comment
-  (->> (lotuc.binpack.eb-afit-io/read-input-from-resource "3d-bin-pack-test/dpp04.txt")
-       (exec-iteration-on-pallet-variant-with-layer [84 104 96] {:dim 45}))
-  (->> (lotuc.binpack.eb-afit-io/read-input-from-resource "3d-bin-pack-test/dpp05.txt")
-       (exec-iteration-on-pallet-variant-with-layer [96 104 84] {:dim 14}))
-  (->> (lotuc.binpack.eb-afit-io/read-input-from-resource "3d-bin-pack-test/dpp06.txt")
-       (exec-iteration-on-pallet-variant-with-layer [96 84 104] {:dim 52})))
 
 (defn exec-iterations
   [{:keys [boxes box-volume pallet-dims pallet-volume] :as input}]

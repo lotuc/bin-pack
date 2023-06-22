@@ -65,8 +65,8 @@
 
 (defn box-visualizer [_props]
   (fn [{:keys [packed-res]}]
-    (let [packed-boxes (:packing-order packed-res)
-          pallet-variant (:pallet packed-res)
+    (let [packed-boxes (:pack packed-res)
+          pallet-variant (:pallet-variant packed-res)
 
           {:strs [packedBoxes] :as c1}
           (useControls'
@@ -118,10 +118,7 @@
           (reset! calculating true)
           (js/setTimeout
            #(try (let [i (eb-afit-io/read-input txt)
-                       r (eb-afit/find-best-pack i)
-                       r (eb-afit/exec-iteration-on-pallet-variant-with-layer
-                          (:pallet-variant r) (:layer r) i
-                          {:packing-order []})]
+                       r (eb-afit/find-best-pack i)]
                    (reset! packed-res r))
                  (finally (reset! calculating false)))
            100))]
@@ -147,7 +144,7 @@
                   :disabled @calculating
                   :onClick (fn [_] (find-best-pack @input-txt))}
          (str "Find best pack"
-              (when @calculating "(calculating)"))]]
+              (when @calculating " (calculating)"))]]
        ;; Right side rendering area
        [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
         [:f> box-visualizer {:packed-res @packed-res}]]])))
