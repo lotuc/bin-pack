@@ -7,6 +7,7 @@
             ["leva" :refer [useControls]]
             ["react" :refer [useRef]]
             ["react-dom/client" :refer [createRoot]]
+            [clojure.string :as s]
             [goog.dom :as gdom]
             [lotuc.binpack.colors :refer [seed-rand-color]]
             [lotuc.binpack.eb-afit :as eb-afit]
@@ -17,6 +18,13 @@
 ;; https://github.com/wknechtel/3d-bin-pack/tree/master/test
 (def sample-input-txt "10, 10, 10
 1. 5, 5, 5, 8")
+(def sample-visualdot-txt "104   96   84
+  0    0    0  104   24   70
+  0    0   70  104   48   14
+  0   24    0  104   24   70
+  0   48    0  104   24   70
+  0   48   70  104   48   14
+  0   72    0  104   24   70")
 
 (defn ItemBox [_props]
   (let [hovered (r/atom false)]
@@ -109,7 +117,9 @@
 
 (defn app
   []
-  (let [input-txt (r/atom sample-input-txt)
+  (let [eb-afit-txt (r/atom sample-input-txt)
+        eb-afit-visualdot-txt (r/atom sample-visualdot-txt)
+        console-txt (r/atom nil)
         txt-type (r/atom "eb-afit-input")
         packed-res (r/atom nil)
         calculating (r/atom false)
@@ -119,7 +129,22 @@
           (reset! calculating true)
           (js/setTimeout
            #(try (let [i (eb-afit-io/read-input txt)
-                       r (eb-afit/find-best-pack i)]
+                       t0 (js/Date.)
+                       r (eb-afit/find-best-pack i)
+                       t1 (js/Date.)]
+                   (->> (into [(str "ELAPSED TIME: " (- t1 t0) "msec")
+                               (str "PALLET ORIENTATION: " (seq (:pallet-variant r)))
+                               (str "PALLET VOLUME: " (:pallet-volume i))
+                               (str "PERCENTAGE OF PALLET VOLUME USED: " (:percentage-used r) "%")
+                               (str "PACKED NUMBER OF BOXES: " (:packed-number r))
+                               (str "TOTAL NUMBER OF BOXES: " (count (:boxes i)))
+                               (str "FIRST LAYER THICKNESS: " (:first-layer-thickness r))]
+                              (when-some [b (seq (:unpacked r))]
+                                (->> b
+                                     (map (fn [{:keys [label dims]}] (str " " label " " dims)))
+                                     (into ["UNPACKED BOXES:"]))))
+                        (s/join "\n")
+                        (reset! console-txt))
                    (reset! packed-res r))
                  (finally (reset! calculating false)))
            100))
@@ -127,44 +152,58 @@
         render-visualdot
         (fn [txt]
           (let [{:keys [pallet pack]} (eb-afit-io/read-visualdot txt)]
-            (reset! packed-res {:pallet-variant pallet :pack pack})))]
+            (reset! packed-res {:pallet-variant pallet :pack pack})))
+
+        on-textrea-change
+        (fn [e]
+          (reset! (if (= @txt-type "eb-afit-input")
+                    eb-afit-txt eb-afit-visualdot-txt)
+                  (.. e -target -value)))
+
+        on-button-click
+        (fn [_]
+          (if (= @txt-type "eb-afit-input")
+            (find-best-pack @eb-afit-txt)
+            (render-visualdot @eb-afit-visualdot-txt)))]
 
     ;; initialize with sample input's packing found.
-    (find-best-pack @input-txt)
+    (find-best-pack @eb-afit-txt)
 
     (fn []
-      [:div {:class "h-screen flex flex-col"}
-       [:div {:class "ml-2"}
-        [:a {:href "https://github.com/lotuc/bin-pack"
-             :target "_blank"
-             :class "font-semibold"} "Github lotuc/bin-pack"]]
-       [:div {:class "h-full p-2 flex flex-row"}
-        ;; Left side input area
-        [:div {:class "w-1/4 h-full flex flex-col mr-2 space-y-2"}
-         [:textarea {:class "grow border-solid border-2 border-indigo-600"
-                     :value @input-txt
-                     :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]
+      (let [textarea-txt
+            (if (= @txt-type "eb-afit-input")
+              @eb-afit-txt @eb-afit-visualdot-txt)]
+        [:div {:class "h-screen flex flex-col"}
+         [:div {:class "ml-2"}
+          [:a {:href "https://github.com/lotuc/bin-pack"
+               :target "_blank"
+               :class "font-semibold"} "Github lotuc/bin-pack"]]
+         [:div {:class "h-full p-2 flex flex-row"}
+          ;; Left side input area
+          [:div {:class "w-1/4 h-full flex flex-col mr-2 space-y-2"}
+           [:textarea {:class "grow border-solid p-1 border-2 border-indigo-600"
+                       :value textarea-txt
+                       :onChange on-textrea-change}]
+           [:select {:class "border-solid border-2"
+                     :value @txt-type
+                     :onChange (fn [e] (reset! txt-type (.. e -target -value)))}
+            [:option {:value "eb-afit-input"} "eb-afit input"]
+            [:option {:value "eb-afit-visualdot"} "eb-afit visualdot"]]
 
-         [:select {:class "border-solid border-2"
-                   :value @txt-type
-                   :onChange (fn [e] (reset! txt-type (.. e -target -value)))}
-          [:option {:value "eb-afit-input"} "eb-afit input"]
-          [:option {:value "eb-afit-visualdot"} "eb-afit visualdot"]]
+           [:button {:class (str "p-1 w-full bg-violet-500 hover:bg-violet-600"
+                                 " active:bg-violet-700 focus:outline-none"
+                                 " focus:ring focus:ring-violet-300 text-white")
+                     :disabled @calculating
+                     :onClick on-button-click}
+            (if (= @txt-type "eb-afit-input")
+              (str "Find best pack" (when @calculating " (calculating)"))
+              "Render boxes")]
+           [:pre {:class "h-32 p-1 border-2 border-indigo-600 text-sm overflow-scroll text-emerald-600"}
+            @console-txt]]
 
-         [:button {:class (str "p-1 w-full bg-violet-500 hover:bg-violet-600"
-                               " active:bg-violet-700 focus:outline-none"
-                               " focus:ring focus:ring-violet-300 text-white")
-                   :disabled @calculating
-                   :onClick (fn [_]
-                              (if (= @txt-type "eb-afit-input")
-                                (find-best-pack @input-txt)
-                                (render-visualdot @input-txt)))}
-          (if (= @txt-type "eb-afit-input")
-            (str "Find best pack" (when @calculating " (calculating)"))
-            "Render boxes")]]
-        ;; Right side rendering area
-        [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
-         [:f> box-visualizer {:packed-res @packed-res}]]]])))
+          ;; Right side rendering area
+          [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
+           [:f> box-visualizer {:packed-res @packed-res}]]]]))))
 
 (defonce root (createRoot (gdom/getElement "root")))
 
