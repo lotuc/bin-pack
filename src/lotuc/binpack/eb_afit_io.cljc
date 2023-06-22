@@ -55,6 +55,13 @@
   [in-txt]
   (->> in-txt s/split-lines parse-visualdot))
 
+(defn gen-visualdot
+  [{:keys [pallet pack]}]
+  (with-out-str
+    (println (s/join " " pallet))
+    (doseq [{:keys [pack-coord pack-dims]} pack]
+      (println (s/join " " (concat pack-coord pack-dims))))))
+
 #?(:clj
    (defn read-input-from-resource
      "Read the test data format defined in in paper
@@ -142,7 +149,7 @@
               (let [vs (->> r (map parse-long) (into []))]
                 (update s :pack conj
                         {:pack-coord (subvec vs 0 3)
-                         :pack-dims (subvec vs 0 3)})))))]
+                         :pack-dims (subvec vs 3)})))))]
     (->> lines
          (map s/trim)
          (map-indexed (fn [i txt] {:line (inc i) :txt txt}))

@@ -110,6 +110,7 @@
 (defn app
   []
   (let [input-txt (r/atom sample-input-txt)
+        txt-type (r/atom "eb-afit-input")
         packed-res (r/atom nil)
         calculating (r/atom false)
 
@@ -121,33 +122,49 @@
                        r (eb-afit/find-best-pack i)]
                    (reset! packed-res r))
                  (finally (reset! calculating false)))
-           100))]
+           100))
+
+        render-visualdot
+        (fn [txt]
+          (let [{:keys [pallet pack]} (eb-afit-io/read-visualdot txt)]
+            (reset! packed-res {:pallet-variant pallet :pack pack})))]
 
     ;; initialize with sample input's packing found.
     (find-best-pack @input-txt)
 
     (fn []
-      [:div {:class "h-screen p-2 flex flex-row"}
-       ;; Left side input area
-       [:div {:class "w-1/4 h-full flex flex-col mr-2"}
-        [:div
-         [:a {:href "https://github.com/lotuc/bin-pack"
-              :target "_blank"
-              :class "font-semibold"} "Github lotuc/bin-pack"]]
-        [:textarea {:class "grow border-solid border-2 border-indigo-600"
-                    :value @input-txt
-                    :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]
+      [:div {:class "h-screen flex flex-col"}
+       [:div {:class "ml-2"}
+        [:a {:href "https://github.com/lotuc/bin-pack"
+             :target "_blank"
+             :class "font-semibold"} "Github lotuc/bin-pack"]]
+       [:div {:class "h-full p-2 flex flex-row"}
+        ;; Left side input area
+        [:div {:class "w-1/4 h-full flex flex-col mr-2 space-y-2"}
+         [:textarea {:class "grow border-solid border-2 border-indigo-600"
+                     :value @input-txt
+                     :onChange (fn [e] (reset! input-txt (.. e -target -value)))}]
 
-        [:button {:class (str "p-1 w-full bg-violet-500 hover:bg-violet-600"
-                              " active:bg-violet-700 focus:outline-none"
-                              " focus:ring focus:ring-violet-300 text-white")
-                  :disabled @calculating
-                  :onClick (fn [_] (find-best-pack @input-txt))}
-         (str "Find best pack"
-              (when @calculating " (calculating)"))]]
-       ;; Right side rendering area
-       [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
-        [:f> box-visualizer {:packed-res @packed-res}]]])))
+         [:select {:class "border-solid border-2"
+                   :value @txt-type
+                   :onChange (fn [e] (reset! txt-type (.. e -target -value)))}
+          [:option {:value "eb-afit-input"} "eb-afit input"]
+          [:option {:value "eb-afit-visualdot"} "eb-afit visualdot"]]
+
+         [:button {:class (str "p-1 w-full bg-violet-500 hover:bg-violet-600"
+                               " active:bg-violet-700 focus:outline-none"
+                               " focus:ring focus:ring-violet-300 text-white")
+                   :disabled @calculating
+                   :onClick (fn [_]
+                              (if (= @txt-type "eb-afit-input")
+                                (find-best-pack @input-txt)
+                                (render-visualdot @input-txt)))}
+          (if (= @txt-type "eb-afit-input")
+            (str "Find best pack" (when @calculating " (calculating)"))
+            "Render boxes")]]
+        ;; Right side rendering area
+        [:div {:class "w-3/4 h-full border-solid border-2 border-indigo-600"}
+         [:f> box-visualizer {:packed-res @packed-res}]]]])))
 
 (defonce root (createRoot (gdom/getElement "root")))
 
