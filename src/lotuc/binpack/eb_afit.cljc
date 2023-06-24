@@ -2,9 +2,9 @@
   "eb stands for the paper's author Erhan Baltacioglu, and afit stands for Air
   Force Institude of Technology."
   #?(:clj (:refer-clojure
-           :exclude [get-in]))
+           :exclude [get-in assoc-in assoc]))
   (:require
-   #?(:clj [clj-fast.clojure.core :refer [get-in]])
+   #?(:clj [clj-fast.clojure.core :refer [get-in assoc-in assoc]])
    [clojure.set :as set])
   #?(:clj (:import
            [java.lang Boolean Long])))
@@ -231,7 +231,8 @@
 (defn find-box
   "FINDS THE MOST PROPER BOXES BY LOOKING AT ALL SIX POSSIBLE ORIENTATIONS, EMPTY
   SPACE GIVEN, ADJACENT BOXES, AND PALLET LIMITS"
-  [{:keys [hmx hy hmy hz hmz] :as smallest-z-gap-geo} boxes]
+  [{:keys [hmx hy hmy hz hmz] :as smallest-z-gap-geo}
+   {:keys [boxes box-packed] :as state}]
   (let [tbn (count boxes)
 
         init-best-fits
@@ -245,12 +246,14 @@
         ;; index and has n boxes.
         try-find-unpacked-box
         (fn [index n]
-          (loop [xs (->> (range n) (map #(+ % index)))
-                 b  nil]
-            (if-let [i (-> xs first)]
-              (let [{:keys [pack-dims] :as b'} (assoc (boxes i) :index i)]
-                (if pack-dims (recur (rest xs) b') b'))
-              b)))
+          (let [maxn (+ index n)]
+            (loop [i index]
+              (if (< i maxn)
+                (if (aget ^booleans box-packed i)
+                  (recur (unchecked-inc i))
+                  (assoc (boxes i) :index i))
+                (let [i (dec i)]
+                  (assoc (boxes i) :index i))))))
 
         ;; first box of the next box type.
         next-box-type
@@ -508,7 +511,7 @@
             state (assoc state :smallest-z smallest-z)
 
             found (-> (get-smallest-z-gap-geo state)
-                      (find-box boxes))
+                      (find-box state))
 
             [layer-in-layer-state {:keys [layer-done? ignore-gap? c-box] :as r}]
             (check-found found state)
