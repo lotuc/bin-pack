@@ -40,27 +40,30 @@
   Returns the best packing results
   - packed-volume: sum volume of the packed boxes
   - packed-number: number of boxes packed
+  - percentage-used: percentage of packed-volume in pallet volume
   - pallet-variant: pallet orientation varint
   - first-layer-thickness
-  - pack: the packed result, it's the input.boxes with pack result fields (for
-    the boxes that are packed)
+  - pack: the packed result, it's the input.boxes with pack result fields
+    (pack-dims & pack-coord), the result is ordered by packing order.
+  - unpacked: unpacked boxes list
   ```
   (find-best-pack {:pallet-volume 1000,
                    :pallet-dims [10 10 10],
                    :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
                    :box-volume 1000})
   ;; ->
-  {:percentage-used 100,
-   :packed-volume 1000,
+  {:packed-volume 1000,
    :packed-number 1,
    :pallet-variant [10 10 10],
+   :percentage-used 100.0,
    :first-layer-thickness 10,
    :pack
-   [{:dims [10 10 10],
+   [{:pack-dims [10 10 10],
+     :pack-coord [0 0 0],
+     :dims [10 10 10],
      :vol 1000,
-     :n 1,
-     :pack-dims [10 10 10],
-     :pack-coord [0 0 0]}]}
+     :n 1}],
+   :unpacked []}
   ```"
   [input]
   (let [input (init-optimization-fields input)
@@ -506,7 +509,7 @@
   "PACKS THE BOXES FOUND AND ARRANGES ALL VARIABLES AND RECORDS PROPERLY"
   [{[px _py _pz] :pallet :as state} input]
   (let [init-state (assoc state :scrap-pad [{:cumx px :cumz 0}])]
-    (loop [{:keys [scrap-pad boxes] :as state} init-state]
+    (loop [{:keys [scrap-pad] :as state} init-state]
       (let [smallest-z (find-smallest-z scrap-pad)
             state (assoc state :smallest-z smallest-z)
 
