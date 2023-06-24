@@ -1,6 +1,7 @@
-[![Clojars Project](https://img.shields.io/clojars/v/org.lotuc/bin-pack.svg)](https://clojars.org/org.lotuc/bin-pack)
-
 # Bin Pack
+
+[![cljdoc badge](https://cljdoc.org/badge/lotuc/bin-pack)](https://cljdoc.org/d/lotuc/bin-pack/)
+[![Clojars Project](https://img.shields.io/clojars/v/org.lotuc/bin-pack.svg)](https://clojars.org/org.lotuc/bin-pack)
 
 ## eb-afit
 
