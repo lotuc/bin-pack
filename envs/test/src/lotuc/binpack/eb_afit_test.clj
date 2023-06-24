@@ -223,7 +223,7 @@
     (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
                  eb-afit-io/read-input-from-resource)
           bs (:boxes i0)
-          i1 (-> (merge i0 (eb-afit/make-box-xyz-array bs))
+          i1 (-> (merge i0 (eb-afit/make-box-xyz-arrays bs))
                  (assoc :box-packed (make-array Boolean/TYPE (count bs))))
           c 300000]
       (println
@@ -238,7 +238,7 @@
     (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
                  eb-afit-io/read-input-from-resource)
           bs (:boxes i0)
-          i1 (-> (merge i0 (eb-afit/make-box-xyz-array bs))
+          i1 (-> (merge i0 (eb-afit/make-box-xyz-arrays bs))
                  (assoc :box-packed (make-array Boolean/TYPE (count bs))
                         :remain-py 96
                         :pallet [104 96 84]))
