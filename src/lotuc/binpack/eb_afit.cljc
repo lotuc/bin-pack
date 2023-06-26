@@ -29,6 +29,8 @@
 
   The implementation is a modified version.
 
+  Notice that we assume all numbers in patermeter to be long.
+
   Parameter
   - pallet-dims: a vector of the pallet's 3 dimensions [px py pz]
   - boxes: a vector of box types, each of its item is
@@ -142,14 +144,20 @@
   [{:keys [boxes pallet-dims] :as input}]
   (let [boxes (->> boxes
                    (map (fn [{:keys [dims n] :as b}]
-                          (let [b' (assoc b :vol (apply * dims))]
+                          (let [dims (->> dims (map long) (into []))
+                                b' (assoc b
+                                          :dims dims
+                                          :n (long n)
+                                          :vol (apply * dims))]
                             (map (fn [_] b') (range n)))))
                    flatten
                    (into []))
+        pallet-dims (->> pallet-dims (map long) (into []))
         box-volume (reduce + (map :vol boxes))
         pallet-volume (apply * pallet-dims)]
     (-> input
         (assoc :boxes boxes
+               :pallet-dims pallet-dims
                :box-volume box-volume
                :pallet-volume pallet-volume)
         (merge (make-box-xyz-arrays boxes)))))
