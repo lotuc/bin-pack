@@ -18,26 +18,24 @@ https://github.com/wknechtel/3d-bin-pack .
 ```clojure
 (require '[lotuc.binpack.eb-afit :as eb-afit])
 
-(eb-afit/find-best-pack
- {:pallet-volume 1000,
-  :pallet-dims [10 10 10],
-  :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
-  :box-volume 1000})
+(find-best-pack {:pallet-volume 1000,
+                 :pallet-dims [10 5 5],
+                 :boxes [{:dims [5 5 5], :n 3}],
+                 :box-volume 1000})
 
 ;; ->
 
-{:packed-volume 1000,
- :packed-number 1,
- :pallet-variant [10 10 10],
+{:pallet-volume 250,
+ :box-volume 375,
+ :packed-volume 250,
+ :packed-number 2,
+ :pallet-variant [10 5 5],
  :percentage-used 100.0,
- :first-layer-thickness 10,
- :pack                                  ; ordered by packing order
- [{:pack-dims [10 10 10],
-   :pack-coord [0 0 0],
-   :dims [10 10 10],
-   :vol 1000,
-   :n 1}],
- :unpacked []}
+ :first-layer-thickness 5,
+ :pack
+ [{:pack-dims [5 5 5], :pack-coord [0 0 0], :dims [5 5 5], :vol 125, :n 3}
+  {:pack-dims [5 5 5], :pack-coord [5 0 0], :dims [5 5 5], :vol 125, :n 3}],
+ :unpacked {:dims [5 5 5], :vol 125, :n 3, :unpacked-n 1}}
 ```
 
 ## visualizer

@@ -24,10 +24,7 @@
   ```
   {:boxes
    [{:label \"1\", :dims [70 104 24], :vol 174720, :n 1}
-    {:label \"2\", :dims [14 104 48], :vol 69888, :n 2}
     {:label \"2\", :dims [14 104 48], :vol 69888, :n 2}],
-   :box-volume 454272,
-   :pallet-volume 838656,
    :pallet-dims [104 96 84]}
   ```
   "
@@ -101,7 +98,7 @@
         dims (->> [dim0 dim1 dim2] (map parse-long) (into []))]
 
     (assert-valid (every? some? (conj dims n)))
-    {:label lbl :dims dims :vol  (apply * dims) :n n}))
+    {:label lbl :dims dims :n n}))
 
 (defn parse-pallet-line [{:keys [line txt] :as x}]
   (let [assert-valid
@@ -111,27 +108,20 @@
         _ (assert-valid (some? r))
 
         dims (->> (rest r) (map parse-long) (into []))]
-    {:pallet-volume (apply * dims)
-     :pallet-dims dims}))
+    {:pallet-dims dims}))
 
 (defn parse-eb-afit-input [lines]
   (let [parse-fn
-        (fn [{:keys [pallet-volume pallet-dims boxes box-volume] :as s}
+        (fn [{:keys [pallet-dims boxes] :as s}
              {:keys [line txt] :as x}]
           (cond
             (empty? txt) s
             (not pallet-dims) (merge s (parse-pallet-line x))
-            :else (let [{:keys [n vol] :as box} (parse-box-line x)]
-                    (loop [i 0 s s]
-                      (if (< i n)
-                        (recur (inc i) (-> s
-                                           (update :boxes conj box)
-                                           (update :box-volume + (* n vol))))
-                        s)))))]
+            :else (update s :boxes conj (parse-box-line x))))]
     (->> lines
          (map s/trim)
          (map-indexed (fn [i txt] {:line (inc i) :txt txt}))
-         (reduce parse-fn {:boxes [] :box-volume 0}))))
+         (reduce parse-fn {:boxes []}))))
 
 (defn parse-visualdot [lines]
   (let [parse-fn

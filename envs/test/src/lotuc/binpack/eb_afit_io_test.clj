@@ -23,13 +23,11 @@
 (deftest read-input-test-test
   (testing "can parse all test inputs."
     (doseq [n test-resources]
-      (let [{:keys [pallet-volume pallet-dims boxes box-volume] :as r}
+      (let [{:keys [pallet-dims boxes] :as r}
             (eb-afit-io/read-input-from-resource n)]
         (is (and (some? r)
-                 (some? pallet-volume)
                  (some? pallet-dims)
-                 (some? boxes)
-                 (some? box-volume))
+                 (some? boxes))
             (str "read resource " n))))))
 
 (deftest read-visualdot-test

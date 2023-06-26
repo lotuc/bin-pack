@@ -15,7 +15,8 @@
 ;; Integer/MAX_VALUE
 (def MAX_SIZE 2147483647)
 
-(declare init-optimization-fields)
+(declare prepare-inputs)
+(declare build-unpacked)
 (declare exec-iterations)
 (declare exec-iteration-with-pallet-and-layer-thickness)
 
@@ -30,12 +31,9 @@
 
   Parameter
   - pallet-dims: a vector of the pallet's 3 dimensions [px py pz]
-  - pallet-volume: the pallet volume (* px py pz)
-  - boxes: a vector of boxes, each of its item is
+  - boxes: a vector of box types, each of its item is
       - dims: a vector of the box's 3 dimensions [dim1 dim2 dim3]
-      - vol: volume of the box (* dim1 dim2 dim3)
       - n: represents the count of box with such a dims.
-  - box-volume: the sum of all boxes' vol.
 
   Returns the best packing results
   - packed-volume: sum volume of the packed boxes
@@ -43,30 +41,34 @@
   - percentage-used: percentage of packed-volume in pallet volume
   - pallet-variant: pallet orientation varint
   - first-layer-thickness
-  - pack: the packed result, it's the input.boxes with pack result fields
-    (pack-dims & pack-coord), the result is ordered by packing order.
-  - unpacked: unpacked boxes list
+  - pack: the packed boxes ordered by packing order, the item is taken from the
+    input box, except the following fields
+    - pack-dims: packing orientation
+    - pack-coord: coordination of the packed box
+  - unpacked: unpacked boxes list, the item is taken from the input box, except
+    the following field
+    - unpacked-n: the unpacked count of the box type
   ```
   (find-best-pack {:pallet-volume 1000,
-                   :pallet-dims [10 10 10],
-                   :boxes [{:dims [10 10 10], :vol 1000, :n 1}],
+                   :pallet-dims [10 5 5],
+                   :boxes [{:dims [5 5 5], :n 3}],
                    :box-volume 1000})
   ;; ->
-  {:packed-volume 1000,
-   :packed-number 1,
-   :pallet-variant [10 10 10],
+  {:pallet-volume 250,
+   :box-volume 375,
+   :packed-volume 250,
+   :packed-number 2,
+   :pallet-variant [10 5 5],
    :percentage-used 100.0,
-   :first-layer-thickness 10,
+   :first-layer-thickness 5,
    :pack
-   [{:pack-dims [10 10 10],
-     :pack-coord [0 0 0],
-     :dims [10 10 10],
-     :vol 1000,
-     :n 1}],
-   :unpacked []}
+   [{:pack-dims [5 5 5], :pack-coord [0 0 0], :dims [5 5 5], :vol 125, :n 3}
+    {:pack-dims [5 5 5], :pack-coord [5 0 0], :dims [5 5 5], :vol 125, :n 3}],
+   :unpacked {:dims [5 5 5], :vol 125, :n 3, :unpacked-n 1}}
   ```"
   [input]
-  (let [input (init-optimization-fields input)
+  (let [input
+        (prepare-inputs input)
 
         {:keys [best-pack best-layer best-pallet-variant] :as r}
         (exec-iterations input)
@@ -76,7 +78,7 @@
          best-pallet-variant best-layer input {:packing-order-boxes []})
 
         unpacked
-        (->> best-pack (filter (complement :pack-dims)) (into []))]
+        (build-unpacked best-pack)]
     (-> r
         (set/rename-keys
          {:best-volume :packed-volume
@@ -86,7 +88,24 @@
                       :percentage-used])
         (assoc :first-layer-thickness (get-in r [:best-layer :dim])
                :pack pack
-               :unpacked unpacked))))
+               :unpacked unpacked)
+        (merge (select-keys input [:pallet-volume :box-volume])))))
+
+(defn build-unpacked [boxes]
+  (let [tbn (count boxes)]
+    (loop [i 0 unpacked []]
+      (if (< i tbn)
+        (let [{:keys [n] :as b} (boxes i)
+              unpacked-n (->> (range i (+ i n))
+                              (filter (comp (complement :pack-dims) boxes))
+                              count)]
+          (recur
+           (+ i n)
+           (if (zero? unpacked-n)
+             unpacked (conj (-> b
+                                (assoc :unpacked-n unpacked-n)
+                                (dissoc :pack-dims :pack-coord))))))
+        unpacked))))
 
 (defn make-rotation
   ([[x y z] variant]
@@ -119,9 +138,21 @@
      :box-ys box-ys
      :box-zs box-zs}))
 
-(defn init-optimization-fields
-  [{boxes :boxes :as input}]
-  (merge input (make-box-xyz-arrays boxes)))
+(defn prepare-inputs
+  [{:keys [boxes pallet-dims] :as input}]
+  (let [boxes (->> boxes
+                   (map (fn [{:keys [dims n] :as b}]
+                          (let [b' (assoc b :vol (apply * dims))]
+                            (map (fn [_] b') (range n)))))
+                   flatten
+                   (into []))
+        box-volume (reduce + (map :vol boxes))
+        pallet-volume (apply * pallet-dims)]
+    (-> input
+        (assoc :boxes boxes
+               :box-volume box-volume
+               :pallet-volume pallet-volume)
+        (merge (make-box-xyz-arrays boxes)))))
 
 (defn inject-optimization-fields-to-state
   [state {:keys [boxes box-xs box-volume pallet-volume] :as input}]

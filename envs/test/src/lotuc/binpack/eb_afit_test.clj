@@ -188,28 +188,6 @@
              :smallest-z 1}))
         "pre cumz < pos cumz")))
 
-(deftest find-box-test
-  (testing "find-box"
-
-    (eb-afit/find-box
-     {:hmx 84 :hy 45 :hmy 104 :hz 96 :hmz 96}
-     (:boxes (-> "3d-bin-pack-test/dpp04.txt"
-                 eb-afit-io/read-input-from-resource)))
-
-    (eb-afit/find-box
-     {:hmx 21 :hy 14 :hmy 104 :hz 7 :hmz 59}
-     (-> (:boxes (-> "3d-bin-pack-test/dpp05.txt"
-                     eb-afit-io/read-input-from-resource))
-         (assoc-in [50 :pack-dims]  1)
-         (assoc-in [51 :pack-dims]  1)
-         (assoc-in [52 :pack-dims]  1)
-         (assoc-in [53 :pack-dims]  1)
-         (assoc-in [54 :pack-dims]  1)
-         (assoc-in [55 :pack-dims]  1)
-         (assoc-in [56 :pack-dims]  1)))
-
-    (is true)))
-
 (deftest list-candit-layers-test
   (testing "List candit layers"
     (-> (eb-afit/list-candit-layers
