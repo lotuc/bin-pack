@@ -12,12 +12,16 @@
   (b/delete {:path "target"}))
 
 (defn prep [_]
-  (println "writing pom")
-  (b/write-pom {:class-dir class-dir
-                :lib lib
-                :version version
-                :basis basis
-                :src-dirs ["src"]})
+  (-> {:class-dir class-dir
+       :lib lib
+       :version version
+       :basis basis
+       :src-dirs ["src"]
+       :scm {:url "https://github.com/lotuc/bin-pack"
+             :connection "scm:git:git://github.com/lotuc/bin-pack.git"
+             :developerConnection "scm:git:ssh://git@github.com/lotuc/bin-pack.git"
+             :tag (b/git-process {:git-args "rev-parse HEAD"})}}
+      b/write-pom)
   (b/copy-dir {:src-dirs ["src" "resources"]
                :target-dir class-dir}))
 
