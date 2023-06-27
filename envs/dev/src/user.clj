@@ -18,13 +18,14 @@
   (->> #(do (when % (.close %)) (flames/start! {:port 54321, :host "localhost"}))
        (swap! flames)))
 
-(defn find-best-pack-flame [& {:keys [n]
-                               :or {n "3d-bin-pack-test/mpp02.txt"}}]
+(defn find-best-pack-flame
+  [& {:keys [n time-bound-in-millis]}]
   (let [input (eb-afit-io/read-input-from-resource n)]
     (start-flame)
     (println "========================================")
     (println (count (:boxes input)))
-    (let [r (time (eb-afit/find-best-pack input))
+    (let [r (time (eb-afit/find-best-pack
+                   input {:time-bound-in-millis time-bound-in-millis}))
           r (-> r
                 (dissoc :input :pack)
                 (assoc :total-number (count (:input r))))]
@@ -32,4 +33,5 @@
     (println "========================================")))
 
 (comment
-  (find-best-pack-flame))
+  (find-best-pack-flame {:n "3d-bin-pack-test/mpp05.txt"
+                         :time-bound-in-millis 900}))

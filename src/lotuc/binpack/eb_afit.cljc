@@ -20,6 +20,9 @@
 (declare exec-iterations)
 (declare exec-iteration-with-pallet-and-layer-thickness)
 
+(def ^:dynamic *time-bound-in-millis* nil)
+(def ^:dynamic *starts-at-in-millis* nil)
+
 (defn find-best-pack
   "Find the best packing strategy for given input using the algorithm described in
   paper https://scholar.afit.edu/etd/4563/.
@@ -32,10 +35,14 @@
   Notice that we assume all numbers in patermeter to be long.
 
   Parameter
-  - pallet-dims: a vector of the pallet's 3 dimensions [px py pz]
-  - boxes: a vector of box types, each of its item is
+  - `input` `:pallet-dims`: a vector of the pallet's 3 dimensions [px py pz]
+  - `input` `:boxes`: a vector of box types, each of its item is
       - dims: a vector of the box's 3 dimensions [dim1 dim2 dim3]
       - n: represents the count of box with such a dims.
+
+  Optional Parameter
+  - `time-bound-in-millis`: if given, will track elapsed time since begining,
+    throw error on exceeding the time bound.
 
   Returns the best packing results
   - packed-volume: sum volume of the packed boxes
@@ -68,30 +75,43 @@
     {:pack-dims [5 5 5], :pack-coord [5 0 0], :dims [5 5 5], :vol 125, :n 3}],
    :unpacked {:dims [5 5 5], :vol 125, :n 3, :unpacked-n 1}}
   ```"
-  [input]
-  (let [input
-        (prepare-inputs input)
+  [input & {:keys [time-bound-in-millis]}]
+  (binding [*time-bound-in-millis* time-bound-in-millis
+            *starts-at-in-millis* #?(:clj (. System (currentTimeMillis))
+                                     :cljs (. js/Date (now)))]
+    (let [input
+          (prepare-inputs input)
 
-        {:keys [best-pack best-layer best-pallet-variant] :as r}
-        (exec-iterations input)
+          {:keys [best-pack best-layer best-pallet-variant] :as r}
+          (exec-iterations input)
 
-        {pack :packing-order-boxes}
-        (exec-iteration-with-pallet-and-layer-thickness
-         best-pallet-variant best-layer input {:packing-order-boxes []})
+          {pack :packing-order-boxes}
+          (exec-iteration-with-pallet-and-layer-thickness
+           best-pallet-variant best-layer input {:packing-order-boxes []})
 
-        unpacked
-        (build-unpacked best-pack)]
-    (-> r
-        (set/rename-keys
-         {:best-volume :packed-volume
-          :best-packed-number :packed-number
-          :best-pallet-variant :pallet-variant})
-        (select-keys [:packed-volume :packed-number :pallet-variant
-                      :percentage-used])
-        (assoc :first-layer-thickness (get-in r [:best-layer :dim])
-               :pack pack
-               :unpacked unpacked)
-        (merge (select-keys input [:pallet-volume :box-volume])))))
+          unpacked
+          (build-unpacked best-pack)]
+      (-> r
+          (set/rename-keys
+           {:best-volume :packed-volume
+            :best-packed-number :packed-number
+            :best-pallet-variant :pallet-variant})
+          (select-keys [:packed-volume :packed-number :pallet-variant
+                        :percentage-used])
+          (assoc :first-layer-thickness (get-in r [:best-layer :dim])
+                 :pack pack
+                 :unpacked unpacked)
+          (merge (select-keys input [:pallet-volume :box-volume]))))))
+
+(defn- check-within-time-bound []
+  (when (and *time-bound-in-millis* *starts-at-in-millis*)
+    (let [now-in-millis #?(:clj (. System (currentTimeMillis))
+                           :cljs (. js/Date (now)))
+          elapsed-millis (- now-in-millis *starts-at-in-millis*)]
+      (when (> elapsed-millis *time-bound-in-millis*)
+        (throw (ex-info "exceeds time bound"
+                        {:time-bound-in-millis *time-bound-in-millis*
+                         :starts-at-in-millis *starts-at-in-millis*}))))))
 
 (defn build-unpacked [boxes]
   (let [tbn (count boxes)]
@@ -547,6 +567,8 @@
 (defn pack-layer
   "PACKS THE BOXES FOUND AND ARRANGES ALL VARIABLES AND RECORDS PROPERLY"
   [{[px _py _pz] :pallet :as state} input]
+  (check-within-time-bound)
+
   (let [init-state (assoc state :scrap-pad [{:cumx px :cumz 0}])]
     (loop [{:keys [scrap-pad] :as state} init-state]
       (let [smallest-z (find-smallest-z scrap-pad)
