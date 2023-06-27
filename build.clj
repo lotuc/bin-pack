@@ -1,11 +1,14 @@
 (ns build
-  (:require [clojure.tools.build.api :as b]))
+  (:require [clojure.java.io :as io]
+            [clojure.tools.build.api :as b]
+            [deps-deploy.deps-deploy :as deps-deploy]))
 
 (def lib 'org.lotuc/bin-pack)
 (def version (format "0.1.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn"}))
 
+(def pom-file "target/classes/META-INF/maven/org.lotuc/bin-pack/pom.xml")
 (def uber-file "target/lotuc-bin-pack.jar")
 
 (defn clean [_]
@@ -33,5 +36,27 @@
            :uber-file uber-file
            :basis basis}))
 
-(defn all [_]
+(defn build [_]
   (clean nil) (prep nil) (uber nil))
+
+(defn deploy [_]
+  (when (:build _)
+    (build _))
+
+  ;; clj -T:build deploy :installer :remote
+  (when-not (.exists (io/file uber-file))
+    (println "file not found:" uber-file)
+    (println "build first: clj -T:build build")
+    (System/exit 1))
+
+  (when-not (.exists (io/file pom-file))
+    (println "file not found:" pom-file)
+    (println "build first: clj -T:build build")
+    (System/exit 1))
+
+  (io/copy (io/file pom-file) (io/file "pom.xml"))
+
+  (-> {:installer (or (:installer _) :local)
+       :sign-releases? false
+       :artifact uber-file}
+      deps-deploy/deploy))
