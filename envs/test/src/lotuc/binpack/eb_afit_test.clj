@@ -283,3 +283,9 @@
                    (filter #(s/includes? % "rnd")))]
       (testing (str ": handle " n)
         (test-find-test-pack-on-resource n)))))
+
+(deftest find-best-pack-not-found-test
+  (testing "we do not found a packing scheme"
+    (is (nil? (eb-afit/find-best-pack
+                {:pallet-dims [80 80 80]
+                 :boxes [{:dims [90 90 90] :n 1}]})))))

@@ -44,7 +44,7 @@
   - `time-bound-in-millis`: if given, will track elapsed time since begining,
     throw error on exceeding the time bound.
 
-  Returns the best packing results
+  Returns the best packing results (returns nil if no packing scheme found) 
   - packed-volume: sum volume of the packed boxes
   - packed-number: number of boxes packed
   - percentage-used: percentage of packed-volume in pallet volume
@@ -58,10 +58,8 @@
     the following field
     - unpacked-n: the unpacked count of the box type
   ```
-  (find-best-pack {:pallet-volume 1000,
-                   :pallet-dims [10 5 5],
-                   :boxes [{:dims [5 5 5], :n 3}],
-                   :box-volume 1000})
+  (find-best-pack {:pallet-dims [10 5 5],
+                   :boxes [{:dims [5 5 5], :n 3}]})
   ;; ->
   {:pallet-volume 250,
    :box-volume 375,
@@ -83,25 +81,26 @@
           (prepare-inputs input)
 
           {:keys [best-pack best-layer best-pallet-variant] :as r}
-          (exec-iterations input)
+          (exec-iterations input)]
+      (when best-pallet-variant
+        ;; when found the pallet scheme, repack & get the packing order
+        (let [{pack :packing-order-boxes}
+              (exec-iteration-with-pallet-and-layer-thickness
+               best-pallet-variant best-layer input {:packing-order-boxes []})
 
-          {pack :packing-order-boxes}
-          (exec-iteration-with-pallet-and-layer-thickness
-           best-pallet-variant best-layer input {:packing-order-boxes []})
-
-          unpacked
-          (build-unpacked best-pack)]
-      (-> r
-          (set/rename-keys
-           {:best-volume :packed-volume
-            :best-packed-number :packed-number
-            :best-pallet-variant :pallet-variant})
-          (select-keys [:packed-volume :packed-number :pallet-variant
-                        :percentage-used])
-          (assoc :first-layer-thickness (get-in r [:best-layer :dim])
-                 :pack pack
-                 :unpacked unpacked)
-          (merge (select-keys input [:pallet-volume :box-volume]))))))
+              unpacked
+              (build-unpacked best-pack)]
+          (-> r
+              (set/rename-keys
+               {:best-volume :packed-volume
+                :best-packed-number :packed-number
+                :best-pallet-variant :pallet-variant})
+              (select-keys [:packed-volume :packed-number :pallet-variant
+                            :percentage-used])
+              (assoc :first-layer-thickness (get-in r [:best-layer :dim])
+                     :pack pack
+                     :unpacked unpacked)
+              (merge (select-keys input [:pallet-volume :box-volume]))))))))
 
 (defn- check-within-time-bound []
   (when (and *time-bound-in-millis* *starts-at-in-millis*)

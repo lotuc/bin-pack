@@ -18,10 +18,8 @@ https://github.com/wknechtel/3d-bin-pack .
 ```clojure
 (require '[lotuc.binpack.eb-afit :as eb-afit])
 
-(eb-afit/find-best-pack {:pallet-volume 1000,
-                         :pallet-dims [10 5 5],
-                         :boxes [{:dims [5 5 5], :n 3}],
-                         :box-volume 1000})
+(eb-afit/find-best-pack {:pallet-dims [10 5 5],
+                         :boxes [{:dims [5 5 5], :n 3}]})
 
 ;; ->
 
