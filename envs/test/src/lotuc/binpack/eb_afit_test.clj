@@ -20,7 +20,6 @@
 
 (deftest apply-found-box-test
   ;; new box will attach to the taller side.
-
   (testing "smallest-z gap is the only gap"
     (is (= [{:cumx 20 :cumz 20}]
            (apply-found-box-get-scrap-pad
@@ -188,20 +187,20 @@
              :smallest-z 1}))
         "pre cumz < pos cumz")))
 
-(deftest list-candit-layers-test
+(deftest list-candit-layer-thickness-with-weight-test
   (testing "List candit layers"
-    (-> (eb-afit/list-candit-layers
-         (-> "3d-bin-pack-test/dpp04.txt"
-             eb-afit-io/read-input-from-resource)
-         [84 104 96])
-        eb-afit/sort-layers)))
+    (is (some? (-> (eb-afit/list-candit-layer-thickness-with-weight
+                    (-> "3d-bin-pack-test/dpp04.txt"
+                        eb-afit-io/read-input-from-resource
+                        (as-> $ (merge $ (eb-afit/vectorize-box-coords (:boxes $)))))
+                    [84 104 96]))))))
 
 (deftest calc-layer-weight-perf-test
   (testing "calc-layer-weight perf"
     (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
                  eb-afit-io/read-input-from-resource)
           bs (:boxes i0)
-          i1 (-> (merge i0 (eb-afit/make-box-xyz-arrays bs))
+          i1 (-> (merge i0 (eb-afit/vectorize-box-coords bs))
                  (assoc :box-packed (make-array Boolean/TYPE (count bs))))
           c 300000]
       (println
@@ -216,7 +215,7 @@
     (let [i0 (-> "3d-bin-pack-test/mpp01.txt"
                  eb-afit-io/read-input-from-resource)
           bs (:boxes i0)
-          i1 (-> (merge i0 (eb-afit/make-box-xyz-arrays bs))
+          i1 (-> (merge i0 (eb-afit/vectorize-box-coords bs))
                  (assoc :box-packed (make-array Boolean/TYPE (count bs))
                         :remain-py 96
                         :pallet [104 96 84]))
@@ -225,7 +224,7 @@
        (str "find-layer " c " times: ")
        (with-out-str
          (time (doseq [_ (range c)]
-                 (eb-afit/find-layer i1)))))
+                 (eb-afit/find-layer-thickness i1)))))
       (is true))))
 
 (def expected-results
@@ -287,5 +286,5 @@
 (deftest find-best-pack-not-found-test
   (testing "we do not found a packing scheme"
     (is (nil? (eb-afit/find-best-pack
-                {:pallet-dims [80 80 80]
-                 :boxes [{:dims [90 90 90] :n 1}]})))))
+               {:pallet-dims [80 80 80]
+                :boxes [{:dims [90 90 90] :n 1}]})))))
