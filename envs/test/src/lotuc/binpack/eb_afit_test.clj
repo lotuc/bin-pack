@@ -8,6 +8,11 @@
    [lotuc.binpack.eb-afit-io :as eb-afit-io]
    [lotuc.binpack.eb-afit-io-test :as eb-afit-io-test]))
 
+(def use-pmap (= (System/getenv "USE_PMAP") "true"))
+
+(defn- find-best-pack* [input & opts]
+  (eb-afit/find-best-pack input (merge opts {:use-pmap use-pmap})))
+
 (defn- apply-found-box-get-scrap-pad
   [{:keys [scrap-pad smallest-z]} box]
   (:scrap-pad
@@ -235,9 +240,10 @@
   (when-let [expected (get expected-results resource-name-or-file)]
     (is (< (abs (- (:percentage-used expected) percentage-used)) 0.00001)
         (str "expected " (:percentage-used expected) " vs. " percentage-used))
-    (is (= (select-keys r [:packed-volume :packed-number :pallet-variant
-                           :first-layer-thickness])
-           (dissoc expected :percentage-used)))))
+    (when-not use-pmap
+      (is (= (select-keys r [:packed-volume :packed-number :pallet-variant
+                             :first-layer-thickness])
+             (dissoc expected :percentage-used))))))
 
 (defn- test-find-test-pack-on-resource [resource-name-or-file]
   (println "!! find-best-pack " resource-name-or-file)
@@ -246,13 +252,13 @@
                  (slurp (io/resource resource-name-or-file)))
         input (eb-afit-io/read-input in-txt)
         r (atom nil)
-        costs (with-out-str (time (reset! r (eb-afit/find-best-pack input))))
+        costs (with-out-str (time (reset! r (find-best-pack* input))))
         r @r
         r' (-> r
                (dissoc :pack :unpacked)
                (assoc :total-number (count (:boxes input)))
                (assoc :packed-number (count (:pack r))))]
-    (println ">>" resource-name-or-file "costs " (s/trim costs)
+    (println ">>" resource-name-or-file "(use-pmap=true) costs " (s/trim costs)
              (s/replace (str "\n" (with-out-str (pprint/pprint r')))
                         #"\n" "\n   "))
     (is (some? r) (str "find-best-pack " resource-name-or-file))
@@ -285,6 +291,6 @@
 
 (deftest find-best-pack-not-found-test
   (testing "we do not found a packing scheme"
-    (is (nil? (eb-afit/find-best-pack
+    (is (nil? (find-best-pack*
                {:pallet-dims [80 80 80]
                 :boxes [{:dims [90 90 90] :n 1}]})))))
