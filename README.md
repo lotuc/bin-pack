@@ -38,8 +38,8 @@ https://github.com/wknechtel/3d-bin-pack .
 
 ## visualizer
 
-The [visualizer](./visualizer/README.md) (which is deployed at
-https://lotuc.org/bin-pack/) take the input text, find the best packing strategy
-and visualize the packing result.
+The [visualizer](https://github.com/lotuc/bin-pack-visualizer) (which is
+deployed at https://lotuc.org/bin-pack/) take the input text, find the best
+packing strategy and visualize the packing result.
 
-![](./visualizer/doc/resources/eb-afit-find-best-dpp06.gif)
+![](./doc/resources/eb-afit-find-best-dpp06.gif)

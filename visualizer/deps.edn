@@ -1,6 +1,0 @@
-{:paths ["src/dev" "src/main" "src/test"]
- :deps {thheller/shadow-cljs {:mvn/version "2.23.3"}
-        com.google.guava/guava {:mvn/version "32.0.1-jre"}
-
-        reagent/reagent {:mvn/version "1.2.0"}
-        lotuc.binpack/lotuc-binpack {:local/root ".."}}}
