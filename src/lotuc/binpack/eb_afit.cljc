@@ -15,15 +15,18 @@
 (def ^:private ^:dynamic *starts-at-in-millis* nil)
 (def ^:private ^:dynamic *finished* nil)
 (def ^:private ^:dynamic *use-pmap* nil)
+(def ^:private ^:dynamic *statistics* nil)
 
 #?(:clj (defn- bound-fn-* [f]
           (let [time-bound-in-millis *time-bound-in-millis*
                 starts-at-in-millis *starts-at-in-millis*
-                finished *finished*]
+                finished *finished*
+                statistics *statistics*]
             (fn [& args]
               (binding [*time-bound-in-millis* time-bound-in-millis
                         *starts-at-in-millis* starts-at-in-millis
-                        *finished* finished]
+                        *finished* finished
+                        *statistics* statistics]
                 (apply f args))))))
 
 (declare exec-iterations)
@@ -97,13 +100,14 @@
     {:pack-dims [5 5 5], :pack-coord [5 0 0], :dims [5 5 5], :vol 125, :n 3}],
    :unpacked {:dims [5 5 5], :vol 125, :n 3, :unpacked-n 1}}
   ```"
-  [input & {:keys [time-bound-in-millis use-pmap]}]
+  [input & {:keys [time-bound-in-millis use-pmap on-statistics]}]
   (let [use-pmap (if (some? use-pmap) use-pmap false)
         {:keys [pallet-volume box-volume] :as iteration-input} (build-iteration-input input)
         data (binding [*time-bound-in-millis* time-bound-in-millis
                        *starts-at-in-millis* #?(:clj (. System (currentTimeMillis))
                                                 :cljs (. js/Date (now)))
                        *finished* (atom false)
+                       *statistics* (when on-statistics (let [v (atom {})] (on-statistics v) v))
                        *use-pmap* use-pmap]
                (exec-iterations iteration-input))]
     (when-some [{:keys [best-pack best-layer-thickness best-volume
@@ -125,6 +129,24 @@
          :unpacked unpacked
          :pallet-volume pallet-volume
          :box-volume box-volume}))))
+
+(defn- on-total-pallet-variants [variants]
+  (when *statistics* (swap! *statistics* assoc :pallet-variants variants)))
+
+(defn- on-pallet-variant-start [variant-num]
+  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num] {})))
+
+(defn- on-pallet-variant-finished [variant-num]
+  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :finished?] true)))
+
+(defn- on-pallet-variant-total-layer-thickness [variant-num total-layer-thickness]
+  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :total-layer-thicknesses] total-layer-thickness)))
+
+(defn- on-pallet-variant-layer-thickness-start [variant-num layer-thickness]
+  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :running-layer-thicknesses] layer-thickness)))
+
+(defn- on-pallet-variant-layer-thickness-finished [variant-num _layer-thickness]
+  (when *statistics* (swap! *statistics* update-in [:running-pallet-variants variant-num :finished-layer-thicknesses] (fnil inc 0))))
 
 (defn pack-boxes
   "Generate the packing result for given parameters.
@@ -642,18 +664,24 @@
 
 (defn exec-iterations
   [{:keys [boxes box-volume pallet-dims pallet-volume] :as iteration-input}]
-  (let [run-variant* (fn [pallet-variant]
-                       (try (exec-iteration-on-pallet-variant
-                             pallet-variant iteration-input)
-                            (catch #?(:clj Exception :cljs :default) e
-                              (if (= ::finish (:reason (ex-data e)))
-                                nil
-                                (throw e)))))
+  (let [run-variant* (fn [[pallet-variant-num pallet-variant]]
+                       (try
+                         (on-pallet-variant-start pallet-variant-num)
+                         (exec-iteration-on-pallet-variant
+                          pallet-variant-num pallet-variant iteration-input)
+                         (catch #?(:clj Exception :cljs :default) e
+                           (if (= ::finish (:reason (ex-data e)))
+                             nil
+                             (throw e)))
+                         (finally
+                           (on-pallet-variant-finished pallet-variant-num))))
         run-variant* #?(:clj (if *use-pmap* (bound-fn-* run-variant*) run-variant*)
                         :cljs run-variant*)
         map-fn #?(:clj (if *use-pmap* pmap map) :cljs map)
         res (->> (range (if (cube? pallet-dims) 1 6))
                  (map (partial make-rotation pallet-dims))
+                 ((fn [variants] (on-total-pallet-variants variants) variants))
+                 (map-indexed (fn [i v] [i v]))
                  (map-fn run-variant*)
                  (reduce (fn [res v]
                            (if (:hundred-percent? res)
@@ -673,20 +701,21 @@
     res))
 
 (defn exec-iteration-on-pallet-variant
-  [{:keys [px py pz] :as pallet-variant}
-   {:keys [pallet-volume] :as iteration-input}]
+  [pallet-variant-num pallet-variant {:keys [pallet-volume] :as iteration-input}]
   (when-some [sorted-layer-thickness (->> (list-candit-layer-thickness-with-weight
                                            iteration-input pallet-variant)
                                           (sort-by :weight)
                                           (map :dim)
                                           seq)]
+    (on-pallet-variant-total-layer-thickness pallet-variant-num (count sorted-layer-thickness))
     (loop [[layer-thickness & rest-layer-thicknesses] sorted-layer-thickness
            {:keys [best-volume] :as state} {:best-volume 0}]
+      (on-pallet-variant-layer-thickness-start pallet-variant-num layer-thickness)
       (if layer-thickness
         (let [{:keys [packed-volume packed-number boxes hundred-percent?]}
               (exec-iteration-on-pallet-variant-with-layer-thickness
                pallet-variant layer-thickness iteration-input)
-
+              _ (on-pallet-variant-layer-thickness-finished pallet-variant-num layer-thickness)
               state' (if (> packed-volume best-volume)
                        {:best-volume packed-volume
                         :best-pallet-variant pallet-variant
