@@ -184,7 +184,7 @@
   (when (and *finished* @*finished*)
     (throw (ex-info "short circuit exception on finished" {:reason :finished}))))
 
-(defn- build-unpacked [boxes]
+(defn build-unpacked [boxes]
   (let [tbn (count boxes)]
     (loop [i 0 unpacked []]
       (if (< i tbn)

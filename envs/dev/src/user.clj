@@ -1,8 +1,11 @@
 (ns user
-  (:require [flames.core :as flames]
-            [lambdaisland.classpath.watch-deps :as watch-deps]
-            [lotuc.binpack.eb-afit :as eb-afit]
-            [lotuc.binpack.eb-afit-io :as eb-afit-io]))
+  (:require
+   [clojure.core.async :as a]
+   [flames.core :as flames]
+   [lambdaisland.classpath.watch-deps :as watch-deps]
+   [lotuc.binpack.eb-afit :as eb-afit]
+   [lotuc.binpack.eb-afit-async :as eb-afit-async]
+   [lotuc.binpack.eb-afit-io :as eb-afit-io]))
 
 (defonce watch-deps-started (atom nil))
 (when (and (not @watch-deps-started) (swap! watch-deps-started not))
@@ -59,11 +62,27 @@
       (println r))
     (println "========================================")))
 
+(defn async-find-best-pack-flame
+  [& {:keys [n]}]
+  (let [input (eb-afit-io/read-input-from-resource n)]
+    (start-flame)
+    (println "========================================")
+    (println (count (:boxes input)))
+    (let [r (time (a/<!! (:res-ch (eb-afit-async/find-best-pack input))))
+          r (-> r
+                (dissoc :input :pack)
+                (assoc :total-number (count (:input r))))]
+      (println r))
+    (println "========================================")))
+
 (comment
   (find-best-pack-flame {:n "3d-bin-pack-test/mpp05.txt"
                          :time-bound-in-millis 900})
+  (find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt"})
   (find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt"
                          :use-pmap true})
+
+  (async-find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt"})
 
   (find-best-pack-flame
    {:n "3d-bin-pack-test/mpp03.txt"

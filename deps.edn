@@ -1,5 +1,6 @@
 {:paths ["src" "resources"]
- :deps {bsless/clj-fast {:mvn/version "0.0.11"}}
+ :deps {bsless/clj-fast {:mvn/version "0.0.11"}
+        org.clojure/core.async {:mvn/version "1.6.681"}}
  :aliases
  {:dev  {:extra-paths ["envs/dev/src" "envs/dev/resources"
                        "envs/test/src" "envs/test/resources"]
