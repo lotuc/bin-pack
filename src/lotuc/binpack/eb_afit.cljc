@@ -15,18 +15,15 @@
 (def ^:private ^:dynamic *starts-at-in-millis* nil)
 (def ^:private ^:dynamic *finished* nil)
 (def ^:private ^:dynamic *use-pmap* nil)
-(def ^:private ^:dynamic *statistics* nil)
 
 #?(:clj (defn- bound-fn-* [f]
           (let [time-bound-in-millis *time-bound-in-millis*
                 starts-at-in-millis *starts-at-in-millis*
-                finished *finished*
-                statistics *statistics*]
+                finished *finished*]
             (fn [& args]
               (binding [*time-bound-in-millis* time-bound-in-millis
                         *starts-at-in-millis* starts-at-in-millis
-                        *finished* finished
-                        *statistics* statistics]
+                        *finished* finished]
                 (apply f args))))))
 
 (declare exec-iterations)
@@ -77,8 +74,9 @@
   - percentage-used: percentage of packed-volume in pallet volume
   - pallet-variant: pallet orientation varint
   - first-layer-thickness
-  - pack: the packed boxes ordered by packing order, the item is taken from the
-    input box, except the following fields
+  - pack: *the returned result is not sorted by packing order*, you can retrieve
+    the packing order results by `pack-boxes`. the item is taken from the input
+    box, except the following fields
     - pack-dims: packing orientation
     - pack-coord: coordination of the packed box
   - unpacked: unpacked boxes list, the item is taken from the input box, except
@@ -100,53 +98,27 @@
     {:pack-dims [5 5 5], :pack-coord [5 0 0], :dims [5 5 5], :vol 125, :n 3}],
    :unpacked {:dims [5 5 5], :vol 125, :n 3, :unpacked-n 1}}
   ```"
-  [input & {:keys [time-bound-in-millis use-pmap on-statistics]}]
+  [input & {:keys [time-bound-in-millis use-pmap]}]
   (let [use-pmap (if (some? use-pmap) use-pmap false)
         {:keys [pallet-volume box-volume] :as iteration-input} (build-iteration-input input)
         data (binding [*time-bound-in-millis* time-bound-in-millis
                        *starts-at-in-millis* #?(:clj (. System (currentTimeMillis))
                                                 :cljs (. js/Date (now)))
                        *finished* (atom false)
-                       *statistics* (when on-statistics (let [v (atom {})] (on-statistics v) v))
                        *use-pmap* use-pmap]
                (exec-iterations iteration-input))]
     (when-some [{:keys [best-pack best-layer-thickness best-volume
                         best-packed-number best-pallet-variant percentage-used]}
                 data]
-      (let [pack (let [!pack (atom [])]
-                     ;; exec the best packing iteration for the packing info
-                     ;; with packing order
-                   (exec-iteration-on-pallet-variant-with-layer-thickness
-                    best-pallet-variant best-layer-thickness iteration-input :on-pack #(swap! !pack conj %))
-                   @!pack)
-            unpacked (build-unpacked best-pack)]
-        {:packed-volume best-volume
-         :packed-number best-packed-number
-         :pallet-variant best-pallet-variant
-         :percentage-used percentage-used
-         :first-layer-thickness best-layer-thickness
-         :pack pack
-         :unpacked unpacked
-         :pallet-volume pallet-volume
-         :box-volume box-volume}))))
-
-(defn- on-total-pallet-variants [variants]
-  (when *statistics* (swap! *statistics* assoc :pallet-variants variants)))
-
-(defn- on-pallet-variant-start [variant-num]
-  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num] {})))
-
-(defn- on-pallet-variant-finished [variant-num]
-  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :finished?] true)))
-
-(defn- on-pallet-variant-total-layer-thickness [variant-num total-layer-thickness]
-  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :total-layer-thicknesses] total-layer-thickness)))
-
-(defn- on-pallet-variant-layer-thickness-start [variant-num layer-thickness]
-  (when *statistics* (swap! *statistics* assoc-in [:running-pallet-variants variant-num :running-layer-thicknesses] layer-thickness)))
-
-(defn- on-pallet-variant-layer-thickness-finished [variant-num _layer-thickness]
-  (when *statistics* (swap! *statistics* update-in [:running-pallet-variants variant-num :finished-layer-thicknesses] (fnil inc 0))))
+      {:packed-volume best-volume
+       :packed-number best-packed-number
+       :pallet-variant best-pallet-variant
+       :percentage-used percentage-used
+       :first-layer-thickness best-layer-thickness
+       :pack (filter :pack-dims best-pack)
+       :unpacked (build-unpacked best-pack)
+       :pallet-volume pallet-volume
+       :box-volume box-volume})))
 
 (defn pack-boxes
   "Generate the packing result for given parameters.
@@ -162,7 +134,7 @@
 
         {:keys [boxes] :as r}
         (exec-iteration-on-pallet-variant-with-layer-thickness
-         pallet-variant first-layer-thickness iteration-input
+         iteration-input pallet-variant first-layer-thickness
          :on-pack #(swap! !pack conj %))
 
         pack @!pack
@@ -620,7 +592,7 @@
 
 (defn pack-layer
   "PACKS THE BOXES FOUND AND ARRANGES ALL VARIABLES AND RECORDS PROPERLY"
-  [{[px _py _pz] :pallet :as state} input]
+  [iteration-input {[px _py _pz] :pallet :as state}]
   (check-finished)
 
   (let [init-state (assoc state :scrap-pad [{:cumx px :cumz 0}])]
@@ -636,7 +608,7 @@
 
             state' (merge state layer-in-layer-state)]
         (cond
-          c-box (recur (apply-found-box state' c-box input))
+          c-box (recur (apply-found-box state' c-box iteration-input))
           ignore-gap? (recur (assoc state' :scrap-pad (apply-ignore-gap state')))
           layer-done? state'
           :else (throw (ex-info "illegal state" r)))))))
@@ -664,24 +636,18 @@
 
 (defn exec-iterations
   [{:keys [boxes box-volume pallet-dims pallet-volume] :as iteration-input}]
-  (let [run-variant* (fn [[pallet-variant-num pallet-variant]]
+  (let [run-variant* (fn [pallet-variant]
                        (try
-                         (on-pallet-variant-start pallet-variant-num)
-                         (exec-iteration-on-pallet-variant
-                          pallet-variant-num pallet-variant iteration-input)
+                         (exec-iteration-on-pallet-variant iteration-input pallet-variant)
                          (catch #?(:clj Exception :cljs :default) e
                            (if (= ::finish (:reason (ex-data e)))
                              nil
-                             (throw e)))
-                         (finally
-                           (on-pallet-variant-finished pallet-variant-num))))
+                             (throw e)))))
         run-variant* #?(:clj (if *use-pmap* (bound-fn-* run-variant*) run-variant*)
                         :cljs run-variant*)
         map-fn #?(:clj (if *use-pmap* pmap map) :cljs map)
         res (->> (range (if (cube? pallet-dims) 1 6))
                  (map (partial make-rotation pallet-dims))
-                 ((fn [variants] (on-total-pallet-variants variants) variants))
-                 (map-indexed (fn [i v] [i v]))
                  (map-fn run-variant*)
                  (reduce (fn [res v]
                            (if (:hundred-percent? res)
@@ -701,21 +667,18 @@
     res))
 
 (defn exec-iteration-on-pallet-variant
-  [pallet-variant-num pallet-variant {:keys [pallet-volume] :as iteration-input}]
+  [{:keys [pallet-volume] :as iteration-input} pallet-variant]
   (when-some [sorted-layer-thickness (->> (list-candit-layer-thickness-with-weight
                                            iteration-input pallet-variant)
                                           (sort-by :weight)
                                           (map :dim)
                                           seq)]
-    (on-pallet-variant-total-layer-thickness pallet-variant-num (count sorted-layer-thickness))
     (loop [[layer-thickness & rest-layer-thicknesses] sorted-layer-thickness
            {:keys [best-volume] :as state} {:best-volume 0}]
-      (on-pallet-variant-layer-thickness-start pallet-variant-num layer-thickness)
       (if layer-thickness
         (let [{:keys [packed-volume packed-number boxes hundred-percent?]}
               (exec-iteration-on-pallet-variant-with-layer-thickness
-               pallet-variant layer-thickness iteration-input)
-              _ (on-pallet-variant-layer-thickness-finished pallet-variant-num layer-thickness)
+               iteration-input pallet-variant layer-thickness)
               state' (if (> packed-volume best-volume)
                        {:best-volume packed-volume
                         :best-pallet-variant pallet-variant
@@ -731,9 +694,9 @@
         state))))
 
 (defn exec-iteration-on-pallet-variant-with-layer-thickness
-  [pallet-variant
+  [{:keys [boxes box-xs box-volume pallet-volume] :as iteration-input}
+   pallet-variant
    layer-thickness
-   {:keys [boxes box-xs box-volume pallet-volume] :as iteration-input}
    & {:keys [on-pack]}]
   (let [[_px py pz] pallet-variant]
     (loop [state (-> iteration-input
@@ -749,18 +712,17 @@
                             :on-pack on-pack))]
       (let [{:keys [packed-y layer-thickness layer-in-layer pre-layer layer-in-layer-z]
              :as packed-state}
-            (pack-layer state iteration-input)
+            (pack-layer iteration-input state)
 
             packed-state-after-layer-in-layer
             (-> packed-state
                 (as-> $ (if layer-in-layer
                           ;; do layer-in-layer packing
-                          (-> $
-                              (merge {:remain-py (- layer-thickness pre-layer)
-                                      :packed-y (+ pre-layer packed-y)
-                                      :remain-pz layer-in-layer-z
-                                      :layer-thickness layer-in-layer})
-                              (pack-layer iteration-input)
+                          (-> iteration-input
+                              (pack-layer (merge $ {:remain-py (- layer-thickness pre-layer)
+                                                    :packed-y (+ pre-layer packed-y)
+                                                    :remain-pz layer-in-layer-z
+                                                    :layer-thickness layer-in-layer}))
                               (dissoc :layer-in-layer))
                           $))
                 (merge (let [packed-y' (+ packed-y layer-thickness)
