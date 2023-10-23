@@ -2,8 +2,10 @@
   "eb stands for the paper's author Erhan Baltacioglu, and afit stands for Air
   Force Institude of Technology."
   #?(:clj (:refer-clojure :exclude [get-in assoc-in assoc]))
+  #?(:cljs (:require-macros [lotuc.binpack.eb-afit-macro :refer [go go! swap-stats!]]))
   (:require
    #?(:clj [clj-fast.clojure.core :refer [assoc assoc-in]])
+   #?(:clj [lotuc.binpack.eb-afit-macro :refer [go go! swap-stats!]])
    [clojure.core.async :as a]
    [lotuc.binpack.eb-afit :as eb-afit]))
 
@@ -13,7 +15,7 @@
 (def ^:private ^:dynamic *stats* nil)
 
 (defn- continue? []
-  (a/go
+  (go
     (let [{:keys [out-ch in-ch]} *ctx*]
       (when-not (a/>! out-ch [:pause {:statistics (when *stats* @*stats*)}])
         (a/close! in-ch))
@@ -25,8 +27,6 @@
           (a/close! in-ch)
           (a/close! out-ch))
         continue?))))
-
-(defmacro go! [& body] `(a/go (when (a/<! (continue?)) ~@body)))
 
 (declare exec-iterations)
 (declare exec-iteration-on-pallet-variant)
@@ -51,7 +51,7 @@
                       (nil? total-layer-thicknesses) 0
 
                       (and total-layer-thicknesses finished-layer-thicknesses)
-                      (/ (inc (* finished-layer-thicknesses 1.0)) (inc total-layer-thicknesses))
+                      (/ (* (inc finished-layer-thicknesses) 1.0) (inc total-layer-thicknesses))
                       :else 0)))
              (reduce + 0.0)
              (#(* 100 (/ % (count pallet-variants)))))))))
@@ -74,7 +74,8 @@
         (when v
           (a/>! in-ch :continue)
           (recur))))
-    (a/<!! res-ch))
+    #?(:clj (a/<!! res-ch)
+       :cljs (a/go (println :res (a/<! res-ch)))))
   ;; ->
   {:pallet-volume 250,
    :box-volume 375,
@@ -109,9 +110,6 @@
                       :box-volume box-volume})))]
         {:out-ch out-ch :in-ch in-ch :res-ch res-ch}))))
 
-(defmacro ^:private swap-stats! [f & args]
-  `(when *stats* (swap! *stats* ~f ~@args)))
-
 (defn- on-total-pallet-variants [variants]
   (swap-stats! assoc :pallet-variants variants))
 
@@ -135,24 +133,24 @@
 (defn exec-iterations
   [{:keys [boxes box-volume pallet-dims pallet-volume]
     :as iteration-input}]
-  (a/go
+  (go
     (let [ps (->> (range (if (eb-afit/cube? pallet-dims) 1 6))
                   (map (partial eb-afit/make-rotation pallet-dims))
                   ((fn [v] (on-total-pallet-variants v) v))
                   (map-indexed
                    (fn [i v]
-                     (a/go
-                       (go! (on-pallet-variant-start i))
+                     (go
+                       (on-pallet-variant-start i)
                        (let [v (a/<! (exec-iteration-on-pallet-variant iteration-input v i))]
-                         (go! (on-pallet-variant-finished i (:hundred-percent? v)))
+                         (on-pallet-variant-finished i (:hundred-percent? v))
                          v))))
                   set)]
       (a/<!
-       (a/go
+       (go
          (loop [res nil ps ps]
            (if (empty? ps)
              res
-             (let [[{:keys [hundred-percent? best-volume] :as v} ch] (a/alts! ps)
+             (let [[{:keys [hundred-percent? best-volume] :as v} ch] (a/alts! (vec ps))
                    res (cond
                          hundred-percent?                   v
                          (nil? res)                         v
@@ -167,17 +165,17 @@
 (defn exec-iteration-on-pallet-variant
   [{:keys [pallet-volume] :as iteration-input} pallet-variant pallet-variant-num]
   (go! (let [layers (a/<! (go! (eb-afit/list-candit-layer-thickness-with-weight iteration-input pallet-variant)))]
-         (go! (on-pallet-variant-total-layer-thickness pallet-variant-num (count layers)))
+         (on-pallet-variant-total-layer-thickness pallet-variant-num (count layers))
          (when-some [sorted-layer-thickness (->> layers (sort-by :weight) (map :dim) seq)]
            (a/<!
             (go! (loop [[layer-thickness & rest-layer-thicknesses] sorted-layer-thickness
                         {:keys [best-volume] :as state} {:best-volume 0}]
                    (if layer-thickness
-                     (let [_ (go! (on-pallet-variant-layer-thickness-start pallet-variant-num layer-thickness))
+                     (let [_ (on-pallet-variant-layer-thickness-start pallet-variant-num layer-thickness)
                            {:keys [packed-volume packed-number boxes hundred-percent?]}
                            (a/<! (exec-iteration-on-pallet-variant-with-layer-thickness
                                   iteration-input pallet-variant layer-thickness))
-                           _ (go! (on-pallet-variant-layer-thickness-finished pallet-variant-num layer-thickness))
+                           _ (on-pallet-variant-layer-thickness-finished pallet-variant-num layer-thickness)
                            state' (if (> packed-volume best-volume)
                                     {:best-volume packed-volume
                                      :best-pallet-variant pallet-variant

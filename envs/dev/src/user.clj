@@ -61,9 +61,7 @@
     (println "========================================")))
 
 (comment
-  (find-best-pack-flame {:n "3d-bin-pack-test/mpp05.txt"
-                         :time-bound-in-millis 900})
+  (find-best-pack-flame {:n "3d-bin-pack-test/mpp05.txt" :time-bound-in-millis 900})
   (find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt"})
   (find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt" :use-pmap true})
-
   (async-find-best-pack-flame {:n "3d-bin-pack-test/mpp03.txt"}))
