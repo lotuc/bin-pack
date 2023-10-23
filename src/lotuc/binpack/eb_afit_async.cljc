@@ -134,20 +134,22 @@
   [{:keys [boxes box-volume pallet-dims pallet-volume]
     :as iteration-input}]
   (go
-    (let [ps (->> (range (if (eb-afit/cube? pallet-dims) 1 6))
-                  (map (partial eb-afit/make-rotation pallet-dims))
-                  ((fn [v] (on-total-pallet-variants v) v))
-                  (map-indexed
-                   (fn [i v]
-                     (go
-                       (on-pallet-variant-start i)
-                       (let [v (a/<! (exec-iteration-on-pallet-variant iteration-input v i))]
-                         (on-pallet-variant-finished i (:hundred-percent? v))
-                         v))))
-                  set)]
+    (let [n #?(:clj (+ 2 (.. Runtime getRuntime availableProcessors)) :cljs 1)
+          ps-seq (->> (range (if (eb-afit/cube? pallet-dims) 1 6))
+                      (map (partial eb-afit/make-rotation pallet-dims))
+                      ((fn [v] (on-total-pallet-variants v) v))
+                      (map-indexed
+                       (fn [i v]
+                         (fn [] (go
+                                 (on-pallet-variant-start i)
+                                 (let [v (a/<! (exec-iteration-on-pallet-variant iteration-input v i))]
+                                   (on-pallet-variant-finished i (:hundred-percent? v))
+                                   v))))))]
       (a/<!
        (go
-         (loop [res nil ps ps]
+         (loop [res nil
+                ps (set (map (fn [p] (p)) (take n ps-seq)))
+                ps-seq (nthrest ps-seq n)]
            (if (empty? ps)
              res
              (let [[{:keys [hundred-percent? best-volume] :as v} ch] (a/alts! (vec ps))
@@ -156,11 +158,12 @@
                          (nil? res)                         v
                          (or (nil? v) (zero? best-volume))  res
                          (> best-volume (:best-volume res)) v
-                         :else                              res)]
+                         :else                              res)
+                   [p0 & prest] ps-seq]
                (when (continue?)
                  (if hundred-percent?
                    res
-                   (recur res (disj ps ch))))))))))))
+                   (recur res (cond-> (disj ps ch) p0 (conj (p0))) prest )))))))))))
 
 (defn exec-iteration-on-pallet-variant
   [{:keys [pallet-volume] :as iteration-input} pallet-variant pallet-variant-num]
