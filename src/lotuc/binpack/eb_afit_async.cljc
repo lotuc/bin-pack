@@ -5,7 +5,7 @@
   #?(:cljs (:require-macros [lotuc.binpack.eb-afit-macro :refer [go go! swap-stats!]]))
   (:require
    #?(:clj [clj-fast.clojure.core :refer [assoc assoc-in]])
-   #?(:clj [lotuc.binpack.eb-afit-macro :refer [go go! swap-stats!]])
+   #?(:clj [lotuc.binpack.eb-afit-macro :refer [go thread! go! swap-stats!]])
    [clojure.core.async :as a]
    [lotuc.binpack.eb-afit :as eb-afit]))
 
@@ -141,10 +141,10 @@
                       (map-indexed
                        (fn [i v]
                          (fn [] (go
-                                 (on-pallet-variant-start i)
-                                 (let [v (a/<! (exec-iteration-on-pallet-variant iteration-input v i))]
-                                   (on-pallet-variant-finished i (:hundred-percent? v))
-                                   v))))))]
+                                  (on-pallet-variant-start i)
+                                  (let [v (a/<! (exec-iteration-on-pallet-variant iteration-input v i))]
+                                    (on-pallet-variant-finished i (:hundred-percent? v))
+                                    v))))))]
       (a/<!
        (go
          (loop [res nil
@@ -163,11 +163,12 @@
                (when (continue?)
                  (if hundred-percent?
                    res
-                   (recur res (cond-> (disj ps ch) p0 (conj (p0))) prest )))))))))))
+                   (recur res (cond-> (disj ps ch) p0 (conj (p0))) prest)))))))))))
 
 (defn exec-iteration-on-pallet-variant
   [{:keys [pallet-volume] :as iteration-input} pallet-variant pallet-variant-num]
-  (go! (let [layers (a/<! (go! (eb-afit/list-candit-layer-thickness-with-weight iteration-input pallet-variant)))]
+  (go! (let [layers (a/<! #?(:cljs (go! (eb-afit/list-candit-layer-thickness-with-weight iteration-input pallet-variant))
+                             :clj (thread! (eb-afit/list-candit-layer-thickness-with-weight iteration-input pallet-variant))))]
          (on-pallet-variant-total-layer-thickness pallet-variant-num (count layers))
          (when-some [sorted-layer-thickness (->> layers (sort-by :weight) (map :dim) seq)]
            (a/<!
@@ -213,29 +214,33 @@
                                  :on-pack on-pack))]
            (let [{:keys [packed-y layer-thickness layer-in-layer pre-layer layer-in-layer-z]
                   :as packed-state}
-                 (a/<! (go! (eb-afit/pack-layer iteration-input state)))
+                 (a/<! #?(:cljs (go! (eb-afit/pack-layer iteration-input state))
+                          :clj (thread! (eb-afit/pack-layer iteration-input state))))
 
                  packed-state-after-layer-in-layer
-                 (a/<! (go! (-> packed-state
-                                (as-> $ (if layer-in-layer
-                                          ;; do layer-in-layer packing
-                                          (-> (a/<! (go! (eb-afit/pack-layer
-                                                          iteration-input
-                                                          (merge $ {:remain-py (- layer-thickness pre-layer)
-                                                                    :packed-y (+ pre-layer packed-y)
-                                                                    :remain-pz layer-in-layer-z
-                                                                    :layer-thickness layer-in-layer}))))
-                                              (dissoc :layer-in-layer))
+                 (if layer-in-layer
+                   ;; do layer-in-layer packing
+                   (let [s (merge packed-state {:remain-py (- layer-thickness pre-layer)
+                                                :packed-y (+ pre-layer packed-y)
+                                                :remain-pz layer-in-layer-z
+                                                :layer-thickness layer-in-layer})]
+                     (-> (a/<! #?(:cljs (go! (eb-afit/pack-layer iteration-input s))
+                                  :clj (thread! (eb-afit/pack-layer iteration-input s))))
+                         (dissoc :layer-in-layer)))
 
-                                          $))
-                                (merge (let [packed-y' (+ packed-y layer-thickness)
-                                             remain-py' (- py packed-y')]
-                                         {:packed-y packed-y'
-                                          :remain-py remain-py'
-                                          :remain-pz pz})))))
+                   packed-state)
+
+                 packed-state-after-layer-in-layer
+                 (a/<! (go! (merge packed-state-after-layer-in-layer
+                                   (let [packed-y' (+ packed-y layer-thickness)
+                                         remain-py' (- py packed-y')]
+                                     {:packed-y packed-y'
+                                      :remain-py remain-py'
+                                      :remain-pz pz}))))
 
                  next-layer-thickness
-                 (a/<! (go! (eb-afit/find-layer-thickness packed-state-after-layer-in-layer)))]
+                 (a/<! #?(:cljs (go! (eb-afit/find-layer-thickness packed-state-after-layer-in-layer))
+                          :clj (thread! (eb-afit/find-layer-thickness packed-state-after-layer-in-layer))))]
 
              (when (continue?)
                (if next-layer-thickness
