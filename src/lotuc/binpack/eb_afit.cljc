@@ -16,6 +16,10 @@
 (def ^:private ^:dynamic *finished* nil)
 (def ^:private ^:dynamic *use-pmap* nil)
 
+(defn- now-millis []
+  #?(:clj (. System (currentTimeMillis))
+     :cljs (. js/Date (now))))
+
 #?(:clj (defn- bound-fn-* [f]
           (let [time-bound-in-millis *time-bound-in-millis*
                 starts-at-in-millis *starts-at-in-millis*
@@ -102,8 +106,7 @@
   (let [use-pmap (if (some? use-pmap) use-pmap false)
         {:keys [pallet-volume box-volume] :as iteration-input} (build-iteration-input input)
         data (binding [*time-bound-in-millis* time-bound-in-millis
-                       *starts-at-in-millis* #?(:clj (. System (currentTimeMillis))
-                                                :cljs (. js/Date (now)))
+                       *starts-at-in-millis* (now-millis)
                        *finished* (atom false)
                        *use-pmap* use-pmap]
                (exec-iterations iteration-input))]
@@ -154,7 +157,11 @@
 
 (defn- check-finished []
   (when (and *finished* @*finished*)
-    (throw (ex-info "short circuit exception on finished" {:reason :finished}))))
+    (throw (ex-info "short circuit exception on finished" {:reason :finished})))
+  (when (and *time-bound-in-millis*
+             (> (- (now-millis) *starts-at-in-millis*) *time-bound-in-millis*))
+    (throw (ex-info "timeout" {:time-bound-in-millis *time-bound-in-millis*
+                               :starts-at-in-millis *starts-at-in-millis*}))))
 
 (defn build-unpacked [boxes]
   (let [tbn (count boxes)]
